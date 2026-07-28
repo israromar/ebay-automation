@@ -1,0 +1,337 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String      @id @default(cuid())
+  email       String      @unique
+  name        String?
+  createdAt   DateTime    @default(now())
+  workspaces  Workspace[]
+}
+
+model Workspace {
+  id        String          @id @default(cuid())
+  name      String
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  projects  SearchProject[]
+  settings  WorkspaceSettings?
+  createdAt DateTime        @default(now())
+}
+
+model WorkspaceSettings {
+  id                       String    @id @default(cuid())
+  workspaceId              String    @unique
+  workspace                Workspace @relation(fields: [workspaceId], references: [id])
+  minimumRating            Float     @default(4.7)
+  preferredRating          Float     @default(4.8)
+  idealRating              Float     @default(4.9)
+  minimumReviewCount       Int       @default(20)
+  preferredReviewCount     Int       @default(30)
+  minimumOrderCount        Int       @default(50)
+  preferredOrderCount      Int       @default(100)
+  minimumRecentSales       Int       @default(5)
+  minimumMatchConfidence   Int       @default(70)
+  minimumNetMarginPercent  Float     @default(10)
+  preferredNetMarginPercent Float    @default(15)
+  additionalSourcingCostMinor Int    @default(199)
+  ebayFeeRate              Float     @default(0.1325)
+  promotedListingRate      Float     @default(0)
+  expectedReturnCostMinor  Int       @default(0)
+  expectedRefundCostMinor  Int       @default(0)
+  otherFixedCostsMinor     Int       @default(0)
+  otherPercentageCost      Float     @default(0)
+  currency                 String    @default("USD")
+  ebayMarketplace          String    @default("EBAY_US")
+  shipToCountry            String    @default("US")
+  scheduleCron             String?
+  autoExportOnApproval     Boolean   @default(false)
+  googleSpreadsheetId      String?
+  updatedAt                DateTime  @updatedAt
+}
+
+model SearchProject {
+  id          String          @id @default(cuid())
+  workspaceId String
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id])
+  name        String
+  keywords    SearchKeyword[]
+  scans       Scan[]
+  createdAt   DateTime        @default(now())
+}
+
+model SearchKeyword {
+  id        String        @id @default(cuid())
+  projectId String
+  project   SearchProject @relation(fields: [projectId], references: [id])
+  keyword   String
+  createdAt DateTime      @default(now())
+}
+
+model Scan {
+  id          String             @id @default(cuid())
+  projectId   String
+  project     SearchProject      @relation(fields: [projectId], references: [id])
+  keyword     String?
+  mode        String
+  status      String             @default("PENDING")
+  startedAt   DateTime           @default(now())
+  finishedAt  DateTime?
+  jobs        ScanJob[]
+  candidates  ProductCandidate[]
+  auditLogs   AuditLog[]
+}
+
+model ScanJob {
+  id           String    @id @default(cuid())
+  scanId       String
+  scan         Scan      @relation(fields: [scanId], references: [id])
+  type         String
+  status       String    @default("PENDING")
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3)
+  lastError    String?
+  deadLetter   Boolean   @default(false)
+  payloadJson  String?
+  resultJson   String?
+  scheduledFor DateTime  @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model ProductCandidate {
+  id                    String              @id @default(cuid())
+  scanId                String
+  scan                  Scan                @relation(fields: [scanId], references: [id])
+  fingerprint           String
+  status                String              @default("DISCOVERED")
+  productName           String
+  imageUrl              String?
+  searchKeyword         String?
+  aliexpressProductId   String?
+  aliexpressUrl         String?
+  aliexpressPriceMinor  Int?
+  aliexpressShippingMinor Int?
+  adjustedSourceCostMinor Int?
+  rating                Float?
+  reviewCount           Int?
+  orderCount            Int?
+  ebayItemId            String?
+  ebayUrl               String?
+  ebayCurrentPriceMinor Int?
+  avgCompletedSaleMinor Int?
+  medianCompletedSaleMinor Int?
+  soldLast30Days        Int?
+  activeListingCount    Int?
+  matchConfidence       Int?
+  estimatedProfitMinor  Int?
+  netMarginPercent      Float?
+  returnOnCostPercent   Float?
+  rejectionReasonsJson  String?
+  demandVerified        Boolean             @default(false)
+  dataSource            String?
+  lastVerifiedAt        DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  sourceProducts        SourceProduct[]
+  aliexpressProducts    AliExpressProduct[]
+  ebayListings          EbayListing[]
+  matches               ProductMatch[]
+  profitCalculations    ProfitCalculation[]
+  rejectionReasons      RejectionReason[]
+  manualReviews         ManualReview[]
+  exportRecords         ExportRecord[]
+  saleObservations      EbaySaleObservation[]
+
+  @@index([fingerprint])
+  @@index([status])
+}
+
+model SourceProduct {
+  id          String           @id @default(cuid())
+  candidateId String
+  candidate   ProductCandidate @relation(fields: [candidateId], references: [id])
+  marketplace String
+  externalId  String?
+  url         String?
+  rawJson     String
+  collectedAt DateTime         @default(now())
+  confidence  Float?
+  completeness String?
+  warningsJson String?
+}
+
+model AliExpressProduct {
+  id            String              @id @default(cuid())
+  candidateId   String
+  candidate     ProductCandidate    @relation(fields: [candidateId], references: [id])
+  productId     String
+  title         String
+  url           String?
+  imageUrl      String?
+  priceMinor    Int
+  shippingMinor Int?
+  currency      String              @default("USD")
+  rating        Float?
+  reviewCount   Int?
+  orderCount    Int?
+  rawJson       String?
+  variants      AliExpressVariant[]
+  collectedAt   DateTime            @default(now())
+}
+
+model AliExpressVariant {
+  id        String            @id @default(cuid())
+  productId String
+  product   AliExpressProduct @relation(fields: [productId], references: [id])
+  skuId     String?
+  name      String
+  priceMinor Int
+  attrsJson String?
+}
+
+model EbayListing {
+  id              String           @id @default(cuid())
+  candidateId     String
+  candidate       ProductCandidate @relation(fields: [candidateId], references: [id])
+  itemId          String
+  title           String
+  url             String?
+  imageUrl        String?
+  priceMinor      Int
+  shippingMinor   Int?
+  currency        String           @default("USD")
+  condition       String?
+  sellerUsername  String?
+  sellerLocation  String?
+  categoryId      String?
+  rawJson         String?
+  collectedAt     DateTime         @default(now())
+}
+
+model EbaySaleObservation {
+  id              String           @id @default(cuid())
+  candidateId     String
+  candidate       ProductCandidate @relation(fields: [candidateId], references: [id])
+  source          String
+  soldLast30Days  Int?
+  avgPriceMinor   Int?
+  medianPriceMinor Int?
+  totalHistoricalSold Int?
+  evidenceUrl     String?
+  notes           String?
+  verifiedBy      String?
+  observedAt      DateTime         @default(now())
+}
+
+model ProductMatch {
+  id           String           @id @default(cuid())
+  candidateId  String
+  candidate    ProductCandidate @relation(fields: [candidateId], references: [id])
+  ebayItemId   String
+  confidence   Int
+  reasonsJson  String?
+  createdAt    DateTime         @default(now())
+}
+
+model ProfitCalculation {
+  id                       String           @id @default(cuid())
+  candidateId              String
+  candidate                ProductCandidate @relation(fields: [candidateId], references: [id])
+  currency                 String           @default("USD")
+  expectedSellingPriceMinor Int
+  buyerShippingRevenueMinor Int             @default(0)
+  grossRevenueMinor        Int
+  adjustedSourceCostMinor  Int
+  marketplaceFeesMinor     Int
+  promotedListingFeeMinor  Int
+  expectedReturnCostMinor  Int
+  expectedRefundCostMinor  Int
+  otherFixedCostsMinor     Int
+  totalEstimatedCostMinor  Int
+  estimatedProfitMinor     Int
+  profitMarginPercent      Float
+  returnOnCostPercent      Float
+  assumptionsJson          String
+  createdAt                DateTime         @default(now())
+}
+
+model RejectionReason {
+  id          String           @id @default(cuid())
+  candidateId String
+  candidate   ProductCandidate @relation(fields: [candidateId], references: [id])
+  code        String
+  message     String?
+  createdAt   DateTime         @default(now())
+}
+
+model ManualReview {
+  id          String           @id @default(cuid())
+  candidateId String
+  candidate   ProductCandidate @relation(fields: [candidateId], references: [id])
+  action      String
+  notes       String?
+  actor       String?
+  createdAt   DateTime         @default(now())
+}
+
+model ExportRecord {
+  id            String           @id @default(cuid())
+  candidateId   String
+  candidate     ProductCandidate @relation(fields: [candidateId], references: [id])
+  destination   String
+  status        String
+  spreadsheetId String?
+  rowRange      String?
+  error         String?
+  createdAt     DateTime         @default(now())
+}
+
+model DataSourceCredential {
+  id             String   @id @default(cuid())
+  provider       String
+  label          String
+  ciphertext     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DataSourceHealthEvent {
+  id        String   @id @default(cuid())
+  provider  String
+  status    String
+  message   String?
+  metaJson  String?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  scanId     String?
+  scan       Scan?    @relation(fields: [scanId], references: [id])
+  action     String
+  entityType String?
+  entityId   String?
+  detailJson String?
+  createdAt  DateTime @default(now())
+}
+
+model ScheduleConfig {
+  id          String   @id @default(cuid())
+  name        String
+  cron        String
+  enabled     Boolean  @default(true)
+  projectId   String?
+  keyword     String?
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

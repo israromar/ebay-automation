@@ -1,103 +1,134 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import Link from "next/link";
+
+interface Overview {
+  totalCandidates: number;
+  approvedCandidates: number;
+  rejectedCandidates: number;
+  awaitingManualValidation: number;
+  averageMargin: number | null;
+  averageRecentSales: number | null;
+  lastScanTime: string | null;
+  lastScanStatus: string | null;
+  dataSourceHealth: Array<{ provider: string; status: string; message: string | null; createdAt: string }>;
+}
+
+export default function OverviewPage() {
+  const [data, setData] = useState<Overview | null>(null);
+  const [keyword, setKeyword] = useState("portable rechargeable blender");
+  const [running, setRunning] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function load() {
+    const res = await fetch("/api/overview");
+    setData(await res.json());
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function runScan() {
+    setRunning(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/scans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, limit: 5 }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(JSON.stringify(json));
+      setMessage(`Scan ${json.scanId} completed with ${json.candidates.length} candidates.`);
+      await load();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const cards = [
+    { label: "Total candidates", value: data?.totalCandidates ?? "—" },
+    { label: "Approved", value: data?.approvedCandidates ?? "—" },
+    { label: "Rejected", value: data?.rejectedCandidates ?? "—" },
+    { label: "Awaiting manual validation", value: data?.awaitingManualValidation ?? "—" },
+    {
+      label: "Average margin %",
+      value: data?.averageMargin != null ? data.averageMargin.toFixed(1) : "—",
+    },
+    {
+      label: "Average recent sales",
+      value: data?.averageRecentSales != null ? data.averageRecentSales.toFixed(1) : "—",
+    },
+  ];
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="space-y-8">
+      <section className="space-y-2">
+        <h2 className="text-2xl font-semibold">Overview</h2>
+        <p className="max-w-2xl text-sm text-slate-600">
+          Sold-history demand is not available from public eBay Browse APIs. Candidates requiring
+          demand proof stay in <strong>NEEDS_MANUAL_VALIDATION</strong> until you confirm sales.
+        </p>
+      </section>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map((c) => (
+          <div key={c.label} className="rounded-lg border border-slate-200 bg-white p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">{c.label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{c.value}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="font-medium">Run keyword scan</h3>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            aria-label="Search keyword"
+          />
+          <button
+            type="button"
+            onClick={runScan}
+            disabled={running}
+            className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {running ? "Scanning…" : "Start scan"}
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        {message ? <p className="mt-2 text-sm text-slate-700">{message}</p> : null}
+        <p className="mt-2 text-xs text-slate-500">
+          Last scan: {data?.lastScanTime ? new Date(data.lastScanTime).toLocaleString() : "none"} (
+          {data?.lastScanStatus ?? "n/a"}) · <Link href="/candidates">View candidates</Link>
+        </p>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="font-medium">Data-source health</h3>
+        <ul className="mt-3 space-y-2 text-sm">
+          {(data?.dataSourceHealth ?? []).length === 0 ? (
+            <li className="text-slate-500">No events yet.</li>
+          ) : (
+            data!.dataSourceHealth.map((h, i) => (
+              <li key={`${h.provider}-${i}`} className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+                <span>
+                  <span className="font-medium">{h.provider}</span> · {h.status}
+                  {h.message ? ` — ${h.message}` : ""}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {new Date(h.createdAt).toLocaleString()}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+      </section>
     </div>
   );
 }

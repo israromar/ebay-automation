@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@1.0.0"]
+    },
+    "ebay-api": {
+      "command": "npx",
+      "args": ["-y", "@ebay/npm-public-api-mcp@1.0.9"],
+      "env": {
+        "EBAY_CLIENT_ID": "REPLACE_ME",
+        "EBAY_CLIENT_SECRET": "REPLACE_ME",
+        "EBAY_TOKEN_TYPE": "application",
+        "EBAY_API_ENV": "production"
+      }
+    },
+    "gdrive": {
+      "command": "npx",
+      "args": ["-y", "@isaacphi/mcp-gdrive"],
+      "env": {
+        "CLIENT_ID": "REPLACE_ME",
+        "CLIENT_SECRET": "REPLACE_ME",
+        "GDRIVE_CREDS_DIR": "/absolute/path/outside/repo/mcp-gdrive"
+      }
+    }
+  }
+}

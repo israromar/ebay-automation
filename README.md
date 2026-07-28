@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# eBay / AliExpress Product Research Analyzer
 
-## Getting Started
+Automation platform that compares AliExpress sourcing with eBay demand and profitability.
 
-First, run the development server:
+## Status
+
+- **Phase 0 research:** see [`docs/research/`](docs/research/)
+- **Sold history:** not available via public Browse API — MVP uses `NEEDS_MANUAL_VALIDATION` (see [`docs/research/sold-history-decision.md`](docs/research/sold-history-decision.md))
+- **Production runtime does not require Cursor or MCP**
+
+## Stack
+
+Next.js 15, TypeScript, Prisma (SQLite locally; swap `DATABASE_URL` / provider for PostgreSQL in production), Tailwind, Zod, Playwright, Vitest.
+
+## Why these packages
+
+| Package | Why | Alternative considered |
+|---------|-----|------------------------|
+| Prisma | Typed schema + migrations | Drizzle — similar; Prisma chosen for speed |
+| Zod | Boundary validation | Manual checks — weaker |
+| Playwright | Browser tests + optional collectors | Puppeteer — Playwright preferred |
+| googleapis | Official Sheets API | Community MCP — not for production |
+| @modelcontextprotocol/sdk | Internal Phase 5 MCP | Skip if unused |
+| Vitest | Fast unit tests | Jest — heavier |
+
+## Quick start
 
 ```bash
+cp .env.example .env
+npm install
+npx prisma db push
+npx playwright install chromium
+npm test
+npm run poc
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## PoC
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run poc
+```
 
-## Learn More
+Writes `poc-output/poc-report.json`, CSV export, and a Playwright trace.
 
-To learn more about Next.js, take a look at the following resources:
+## MCP (Cursor, optional)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Copy [`docs/mcp/cursor-mcp.config.example.json`](docs/mcp/cursor-mcp.config.example.json) into Cursor MCP settings
+2. Add eBay / Google credentials outside the repo
+3. Follow [`docs/mcp/SMOKE_CHECKLIST.md`](docs/mcp/SMOKE_CHECKLIST.md)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Internal app MCP:
 
-## Deploy on Vercel
+```bash
+npm run dev   # terminal 1
+npm run mcp   # terminal 2 — stdio server
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Write tools require `RESEARCH_MCP_ALLOW_WRITES=true`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Definition of done (MVP)
+
+- Keyword / AliExpress URL scan
+- AliExpress qualification rules (configurable)
+- eBay matching with confidence
+- Honest sold-history reporting; no APPROVED without verified demand
+- Transparent profit breakdown
+- DB persistence + CSV / Sheets export
+- Failed collections with reason codes
+- Credentials never committed
+- Production path independent of Cursor
