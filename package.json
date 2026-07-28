@@ -13,6 +13,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "poc": "tsx scripts/poc-run.ts",
+    "aliexpress:probe": "tsx scripts/aliexpress-probe.ts",
     "mcp": "tsx mcp/server.ts",
     "worker:tick": "tsx scripts/scheduler-tick.ts"
   },

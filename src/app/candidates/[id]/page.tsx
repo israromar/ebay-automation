@@ -3,6 +3,76 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+function UrlActions({ label, url }: { label: string; url?: string | null }) {
+  const [copied, setCopied] = useState(false);
+  const value = url?.trim() || "";
+
+  async function copy() {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Fallback for older browsers / insecure contexts
+      const ta = document.createElement("textarea");
+      ta.value = value;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
+  }
+
+  if (!value) {
+    return (
+      <div className="space-y-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="text-slate-500">—</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0 space-y-1">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <a
+        href={value}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={value}
+        className="block truncate text-teal-800 hover:underline"
+      >
+        {value}
+      </a>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={copy}
+          className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+        >
+          {copied ? "Copied" : "Copy URL"}
+        </button>
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+        >
+          Open
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function money(minor: unknown) {
+  if (typeof minor !== "number") return "—";
+  return `$${(minor / 100).toFixed(2)}`;
+}
+
 export default function CandidateDetailPage() {
   const params = useParams<{ id: string }>();
   const [candidate, setCandidate] = useState<Record<string, unknown> | null>(null);
@@ -47,35 +117,39 @@ export default function CandidateDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold">{String(candidate.productName)}</h2>
+      <div className="min-w-0">
+        <h2 className="break-words text-2xl font-semibold">{String(candidate.productName)}</h2>
         <p className="text-sm text-slate-600">
           Status: <span className="font-medium">{String(candidate.status)}</span>
         </p>
       </div>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-4 text-sm">
           <h3 className="font-medium">AliExpress</h3>
-          <ul className="mt-2 space-y-1 text-slate-700">
-            <li>URL: {String(candidate.aliexpressUrl ?? "—")}</li>
-            <li>Rating: {String(candidate.rating ?? "—")}</li>
-            <li>Reviews: {String(candidate.reviewCount ?? "—")}</li>
-            <li>Orders: {String(candidate.orderCount ?? "—")}</li>
-            <li>Price minor: {String(candidate.aliexpressPriceMinor ?? "—")}</li>
-            <li>Shipping minor: {String(candidate.aliexpressShippingMinor ?? "—")}</li>
-          </ul>
+          <div className="mt-3 space-y-3 text-slate-700">
+            <UrlActions label="URL" url={String(candidate.aliexpressUrl ?? "")} />
+            <ul className="space-y-1">
+              <li>Rating: {String(candidate.rating ?? "—")}</li>
+              <li>Reviews: {String(candidate.reviewCount ?? "—")}</li>
+              <li>Orders: {String(candidate.orderCount ?? "—")}</li>
+              <li>Price: {money(candidate.aliexpressPriceMinor)}</li>
+              <li>Shipping: {money(candidate.aliexpressShippingMinor)}</li>
+            </ul>
+          </div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-4 text-sm">
           <h3 className="font-medium">eBay match</h3>
-          <ul className="mt-2 space-y-1 text-slate-700">
-            <li>URL: {String(candidate.ebayUrl ?? "—")}</li>
-            <li>Confidence: {String(candidate.matchConfidence ?? "—")}</li>
-            <li>Current price minor: {String(candidate.ebayCurrentPriceMinor ?? "—")}</li>
-            <li>Active listings: {String(candidate.activeListingCount ?? "—")}</li>
-            <li>Sold last 30d: {String(candidate.soldLast30Days ?? "—")}</li>
-            <li>Demand verified: {String(candidate.demandVerified)}</li>
-          </ul>
+          <div className="mt-3 space-y-3 text-slate-700">
+            <UrlActions label="URL" url={String(candidate.ebayUrl ?? "")} />
+            <ul className="space-y-1">
+              <li>Confidence: {String(candidate.matchConfidence ?? "—")}</li>
+              <li>Current price: {money(candidate.ebayCurrentPriceMinor)}</li>
+              <li>Active listings: {String(candidate.activeListingCount ?? "—")}</li>
+              <li>Sold last 30d: {String(candidate.soldLast30Days ?? "—")}</li>
+              <li>Demand verified: {String(candidate.demandVerified)}</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -112,7 +186,7 @@ export default function CandidateDetailPage() {
             placeholder="Sold last 30 days"
           />
           <input
-            className="flex-1 rounded-md border border-slate-300 px-3 py-2"
+            className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2"
             value={evidence}
             onChange={(e) => setEvidence(e.target.value)}
             aria-label="Evidence URL"

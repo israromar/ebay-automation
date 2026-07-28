@@ -50,3 +50,5 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+ebay-automation-503807-d8f6cb96fb76.json

@@ -4,8 +4,10 @@ import {
   AliExpressManualImportProvider,
   sampleAliExpressCatalog,
 } from "@/lib/providers/aliexpress-manual";
+import { AliExpressOfficialApiProvider } from "@/lib/providers/aliexpress-official";
 import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
+import type { AliExpressProvider } from "@/lib/providers/types";
 import { z } from "zod";
 
 const bodySchema = z.object({
@@ -15,9 +17,22 @@ const bodySchema = z.object({
   mode: z.enum(["keyword", "aliexpress_url", "ebay_url", "batch"]).optional(),
 });
 
+function createAliExpressProvider(): AliExpressProvider {
+  const appKey = process.env.ALIEXPRESS_APP_KEY ?? "";
+  const appSecret = process.env.ALIEXPRESS_APP_SECRET ?? "";
+  if (appKey && appSecret) {
+    return new AliExpressOfficialApiProvider({
+      appKey,
+      appSecret,
+      trackingId: process.env.ALIEXPRESS_TRACKING_ID ?? "default",
+    });
+  }
+  return new AliExpressManualImportProvider(sampleAliExpressCatalog());
+}
+
 function createOrchestrator() {
   return new ScanOrchestrator({
-    aliexpress: new AliExpressManualImportProvider(sampleAliExpressCatalog()),
+    aliexpress: createAliExpressProvider(),
     ebay: new EbayBrowseApiProvider({
       clientId: process.env.EBAY_CLIENT_ID ?? "",
       clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",

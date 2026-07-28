@@ -152,9 +152,12 @@ export class ScanOrchestrator {
     const rejectionCodes: RejectionCode[] = [];
 
     const qual = qualifyAliExpressProduct(ae, this.rules);
-    if (!qual.passed) {
+    if (qual.reasons.length > 0) {
       status = "ALIEXPRESS_REJECTED";
       rejectionCodes.push(...qual.reasons);
+    } else if (qual.missingFields.length > 0) {
+      // Affiliate API often omits review counts — continue matching, require manual check.
+      status = "NEEDS_MANUAL_VALIDATION";
     }
 
     type MatchCandidate = {
@@ -168,6 +171,7 @@ export class ScanOrchestrator {
     let activeListingCount = 0;
 
     if (status !== "ALIEXPRESS_REJECTED") {
+      // For incomplete AliExpress fields, still attempt eBay matching so operator has comps.
       const ebayListings = await this.deps.ebay.searchProducts({
         keyword: ae.title.slice(0, 80),
         limit: 10,

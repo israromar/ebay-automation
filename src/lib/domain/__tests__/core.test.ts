@@ -51,6 +51,16 @@ describe("qualification", () => {
     );
     expect(r.passed).toBe(true);
   });
+
+  it("treats missing review count as incomplete, not hard fail", () => {
+    const r = qualifyAliExpressProduct(
+      { rating: 4.9, reviewCount: undefined, orderCount: 100 },
+      DEFAULT_RULES,
+    );
+    expect(r.passed).toBe(false);
+    expect(r.reasons).toEqual([]);
+    expect(r.missingFields).toContain("reviewCount");
+  });
 });
 
 describe("matching", () => {
