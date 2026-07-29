@@ -59,7 +59,7 @@ export function rankAliExpressSources(input: RankAliExpressSourcesInput): Ranked
  * Re-rank a text shortlist with DINOv2 visual scores.
  * Drops candidates with available visual evidence below the floor.
  */
-export function applyVisualScoresToRankedSources(ranked: RankedAliExpressSource[], visuals: VisualScoreInput[], options?: { visualFloor?: number; ebayPriceMinor?: number }): RankedAliExpressSource[] {
+export function applyVisualScoresToRankedSources(ranked: RankedAliExpressSource[], visuals: VisualScoreInput[], options?: { visualFloor?: number; ebayPriceMinor?: number; requireVisual?: boolean }): RankedAliExpressSource[] {
   const visualFloor = options?.visualFloor ?? DEFAULT_VISUAL_MATCH_FLOOR;
   const byId = new Map(visuals.map((v) => [v.productId, v]));
 
@@ -85,7 +85,7 @@ export function applyVisualScoresToRankedSources(ranked: RankedAliExpressSource[
       };
     })
     .filter((entry) => {
-      if (!entry.visualAvailable || entry.visualScore == null) return true;
+      if (!entry.visualAvailable || entry.visualScore == null) return options?.requireVisual !== true;
       return entry.visualScore >= visualFloor;
     })
     .sort((a, b) => b.rankScore - a.rankScore);

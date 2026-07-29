@@ -34,7 +34,8 @@ describe("visual matching math", () => {
 
   it("maps similarity into a 0–100 visual score", () => {
     expect(visualSimilarityToScore(1)).toBe(100);
-    expect(visualSimilarityToScore(0)).toBe(50);
+    expect(visualSimilarityToScore(0.6)).toBe(60);
+    expect(visualSimilarityToScore(0)).toBe(0);
     expect(visualSimilarityToScore(-1)).toBe(0);
   });
 
@@ -79,5 +80,18 @@ describe("visual re-ranking", () => {
 
     expect(withVision[0]?.product.productId).toBe("visual");
     expect(withVision.some((entry) => entry.product.productId === "texty")).toBe(false);
+  });
+
+  it("drops candidates without visual evidence when visual matching is required", () => {
+    const ranked = rankAliExpressSources({
+      ebay: { title: "Portable Blender Smoothie Maker", condition: "NEW", priceMinor: 1699 },
+      candidates: [source("unavailable", "Portable Blender Smoothie Maker USB", 4.9, 800)],
+      searchKeyword: "portable blender",
+      rules: DEFAULT_RULES,
+    });
+
+    const withRequiredVision = applyVisualScoresToRankedSources(ranked, [{ productId: "unavailable", score: 0, similarity: 0, available: false }], { ebayPriceMinor: 1699, requireVisual: true });
+
+    expect(withRequiredVision).toEqual([]);
   });
 });

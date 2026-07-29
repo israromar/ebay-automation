@@ -30,10 +30,10 @@ export function cosineSimilarity(a: Float32Array | number[], b: Float32Array | n
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-/** Map cosine similarity [-1, 1] → confidence [0, 100]. */
+/** Map positive DINOv2 cosine agreement [0, 1] → confidence [0, 100]. */
 export function visualSimilarityToScore(similarity: number): number {
-  const clamped = Math.max(-1, Math.min(1, similarity));
-  return Math.round(((clamped + 1) / 2) * 100);
+  const clamped = Math.max(0, Math.min(1, similarity));
+  return Math.round(clamped * 100);
 }
 
 /**

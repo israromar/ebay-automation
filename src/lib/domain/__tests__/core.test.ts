@@ -113,6 +113,20 @@ describe("matching", () => {
       reasons: expect.arrayContaining(["accessory_vs_main"]),
     });
   });
+
+  it("rejects sewing tape as a match for sleep mouth tape", () => {
+    const match = scoreAliExpressSourceMatch(
+      { title: "Hostage Mouth Tape 90 Night Supply", condition: "NEW", priceMinor: 4000 },
+      { title: "Pants Edge Shorten Self Adhesive Pant Mouth Paste Iron on Hem Fabric Fusing Hemming Ironing Sewing Tape", condition: "NEW", priceMinor: 188 },
+      "mouth tape",
+    );
+
+    expect(match).toMatchObject({
+      hardReject: true,
+      confidence: 0,
+      reasons: expect.arrayContaining(["product_context_mismatch"]),
+    });
+  });
 });
 
 describe("scheduler", () => {

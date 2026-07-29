@@ -4,13 +4,26 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const MAX_KEYWORDS = 10;
+const RESEARCH_STATE_KEY = "ebay-automation:research-state:v1";
 
-const KEYWORD_PACKS: { id: string; label: string; keywords: string[] }[] = [
-  { id: "kitchen", label: "Kitchen gadgets", keywords: ["portable blender", "air fryer accessories", "silicone cooking utensils", "electric milk frother"] },
-  { id: "lighting", label: "LED & lighting", keywords: ["led strip lights", "motion sensor night light", "usb desk lamp", "rgb gaming lights"] },
-  { id: "phone", label: "Phone & travel", keywords: ["magnetic phone mount", "portable phone charger", "cable organizer travel", "wireless earbuds case"] },
-  { id: "pet", label: "Pet & home", keywords: ["pet water fountain", "automatic pet feeder", "lint remover roller", "door draft stopper"] },
-];
+interface TrendLibraryKeyword {
+  id: string;
+  rank: number;
+  keyword: string;
+  niche: string;
+  momentum: string;
+  sources: string[];
+  why: string;
+}
+
+interface TrendLibrary {
+  market: string;
+  version: string;
+  researchedAt: string;
+  sources: string[];
+  snapshotId: string;
+  keywords: TrendLibraryKeyword[];
+}
 
 interface TrendRun {
   id: string;
@@ -45,6 +58,37 @@ interface TrendIdea {
     visualScore: number | null;
     visualAvailable: boolean;
   } | null;
+}
+
+interface PersistedResearchState {
+  keywords: string[];
+  draft: string;
+  minPrice: string;
+  maxPrice: string;
+  minListings: string;
+  maxListings: string;
+  searchLimit: string;
+  selectedRunId: string;
+  statusFilter: string;
+  selectedIds: string[];
+  recentlyProcessedIds: string[];
+}
+
+function readPersistedResearchState(): PersistedResearchState | null {
+  try {
+    const raw = window.localStorage.getItem(RESEARCH_STATE_KEY);
+    return raw ? (JSON.parse(raw) as PersistedResearchState) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistResearchState(state: PersistedResearchState) {
+  try {
+    window.localStorage.setItem(RESEARCH_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Research remains usable when browser storage is unavailable.
+  }
 }
 
 function money(minor: number | null | undefined) {
@@ -124,9 +168,22 @@ export default function ResearchPage() {
   const [recentlyProcessed, setRecentlyProcessed] = useState<Set<string>>(new Set());
   const [matchSummary, setMatchSummary] = useState<TrendIdea[] | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
+  const [stateRestored, setStateRestored] = useState(false);
+  const [trendLibrary, setTrendLibrary] = useState<TrendLibrary | null>(null);
+  const [trendNicheFilter, setTrendNicheFilter] = useState("");
+  const [trendsBusy, setTrendsBusy] = useState(false);
 
   const recentKeywords = useMemo(() => collectRecentKeywords(runs), [runs]);
   const keywordSet = useMemo(() => new Set(keywords.map(normalizeKeyword)), [keywords]);
+  const trendNiches = useMemo(() => {
+    if (!trendLibrary) return [] as string[];
+    return [...new Set(trendLibrary.keywords.map((entry) => entry.niche))];
+  }, [trendLibrary]);
+  const filteredTrendKeywords = useMemo(() => {
+    if (!trendLibrary) return [] as TrendLibraryKeyword[];
+    if (!trendNicheFilter) return trendLibrary.keywords;
+    return trendLibrary.keywords.filter((entry) => entry.niche === trendNicheFilter);
+  }, [trendLibrary, trendNicheFilter]);
 
   const addKeywords = useCallback((incoming: string[]) => {
     setKeywords((prev) => {
@@ -158,7 +215,9 @@ export default function ResearchPage() {
   const loadRuns = useCallback(async () => {
     const res = await fetch("/api/research");
     const json = await res.json();
-    setRuns(json.runs ?? []);
+    const nextRuns = (json.runs ?? []) as TrendRun[];
+    setRuns(nextRuns);
+    return nextRuns;
   }, []);
 
   const loadIdeas = useCallback(async (runId?: string, status?: string) => {
@@ -173,10 +232,94 @@ export default function ResearchPage() {
     return nextIdeas;
   }, []);
 
+  const loadTrendLibrary = useCallback(async () => {
+    const res = await fetch("/api/research/trends");
+    const json = await res.json();
+    if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed to load trend library");
+    setTrendLibrary(json as TrendLibrary);
+    return json as TrendLibrary;
+  }, []);
+
+  async function refreshTrendLibrary() {
+    setTrendsBusy(true);
+    try {
+      const res = await fetch("/api/research/trends/refresh", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        setMessage(typeof json.error === "string" ? json.error : JSON.stringify(json.error ?? json));
+        return;
+      }
+      setTrendLibrary(json as TrendLibrary);
+      setMessage(`Trend library refreshed (${(json as TrendLibrary).keywords.length} US seeds, v${(json as TrendLibrary).version}).`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTrendsBusy(false);
+    }
+  }
+
   useEffect(() => {
-    loadRuns();
-    loadIdeas();
-  }, [loadRuns, loadIdeas]);
+    let cancelled = false;
+
+    async function restoreResearchState() {
+      const saved = readPersistedResearchState();
+      const availableRuns = await loadRuns();
+      try {
+        await loadTrendLibrary();
+      } catch {
+        // Trend library can be refreshed manually if auto-seed fails.
+      }
+      const savedRunExists = saved?.selectedRunId && availableRuns.some((run) => run.id === saved.selectedRunId);
+      const runId = savedRunExists ? saved.selectedRunId : "";
+      const status = saved?.statusFilter ?? "";
+
+      if (saved) {
+        setKeywords(Array.isArray(saved.keywords) ? saved.keywords.slice(0, MAX_KEYWORDS) : []);
+        setDraft(saved.draft ?? "");
+        setMinPrice(saved.minPrice ?? "5");
+        setMaxPrice(saved.maxPrice ?? "150");
+        setMinListings(saved.minListings ?? "2");
+        setMaxListings(saved.maxListings ?? "40");
+        setSearchLimit(saved.searchLimit ?? "40");
+        setSelectedRunId(runId);
+        setStatusFilter(status);
+      }
+
+      const loadedIdeas = await loadIdeas(runId || undefined, status || undefined);
+      if (cancelled) return;
+
+      const savedSelected = new Set(saved?.selectedIds ?? []);
+      setSelected(new Set(loadedIdeas.filter((idea) => savedSelected.has(idea.id) && isMatchableIdea(idea)).map((idea) => idea.id)));
+
+      const savedRecent = new Set(saved?.recentlyProcessedIds ?? []);
+      const restoredSummary = loadedIdeas.filter((idea) => savedRecent.has(idea.id));
+      setRecentlyProcessed(savedRecent);
+      setMatchSummary(restoredSummary.length > 0 ? restoredSummary : null);
+      setStateRestored(true);
+    }
+
+    void restoreResearchState();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadRuns, loadIdeas, loadTrendLibrary]);
+
+  useEffect(() => {
+    if (!stateRestored) return;
+    persistResearchState({
+      keywords,
+      draft,
+      minPrice,
+      maxPrice,
+      minListings,
+      maxListings,
+      searchLimit,
+      selectedRunId,
+      statusFilter,
+      selectedIds: [...selected],
+      recentlyProcessedIds: [...recentlyProcessed],
+    });
+  }, [draft, keywords, maxListings, maxPrice, minListings, minPrice, recentlyProcessed, searchLimit, selected, selectedRunId, stateRestored, statusFilter]);
 
   async function startResearch(e: React.FormEvent) {
     e.preventDefault();
@@ -311,7 +454,7 @@ export default function ResearchPage() {
               <label htmlFor="keyword-draft" className="text-sm font-medium text-slate-700">
                 Seed keywords
               </label>
-              <p className="text-xs text-slate-500">Type and press Enter, paste a list, or tap a pack / recent keyword.</p>
+              <p className="text-xs text-slate-500">Type and press Enter, paste a list, or tap a trending / recent keyword.</p>
             </div>
             <p className="text-xs tabular-nums text-slate-500">
               {keywords.length}/{MAX_KEYWORDS}
@@ -366,17 +509,63 @@ export default function ResearchPage() {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {KEYWORD_PACKS.map((pack) => (
-              <button key={pack.id} type="button" disabled={busy || keywords.length >= MAX_KEYWORDS} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900 disabled:opacity-50" onClick={() => addKeywords(pack.keywords)} title={pack.keywords.join(", ")}>
-                + {pack.label}
-              </button>
-            ))}
-            {keywords.length > 0 && (
+          {keywords.length > 0 && (
+            <div className="flex justify-end">
               <button type="button" className="rounded-full px-3 py-1 text-xs text-slate-500 hover:text-rose-700" onClick={() => setKeywords([])}>
                 Clear all
               </button>
-            )}
+            </div>
+          )}
+
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+              <div>
+                <p className="text-sm font-medium text-slate-800">US trending library</p>
+                <p className="text-xs text-slate-500">{trendLibrary ? `Top ${trendLibrary.keywords.length} · v${trendLibrary.version} · researched ${new Date(trendLibrary.researchedAt).toLocaleDateString()}` : "Loading curated seeds…"}</p>
+              </div>
+              <button type="button" disabled={busy || trendsBusy} onClick={() => void refreshTrendLibrary()} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-400 hover:text-teal-900 disabled:opacity-50">
+                {trendsBusy ? "Refreshing…" : "Refresh Trends"}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 border-b border-slate-200 px-3 py-2">
+              <button type="button" className={`rounded-full px-2.5 py-1 text-xs ${trendNicheFilter === "" ? "bg-teal-700 text-white" : "bg-white text-slate-600 hover:bg-teal-50"}`} onClick={() => setTrendNicheFilter("")}>
+                All niches
+              </button>
+              {trendNiches.map((niche) => (
+                <button key={niche} type="button" className={`rounded-full px-2.5 py-1 text-xs ${trendNicheFilter === niche ? "bg-teal-700 text-white" : "bg-white text-slate-600 hover:bg-teal-50"}`} onClick={() => setTrendNicheFilter(niche)}>
+                  {niche}
+                </button>
+              ))}
+            </div>
+
+            <div className="max-h-64 overflow-y-auto">
+              {filteredTrendKeywords.length === 0 ? (
+                <p className="px-3 py-4 text-sm text-slate-500">No trending keywords yet. Click Refresh Trends.</p>
+              ) : (
+                <ul className="divide-y divide-slate-200">
+                  {filteredTrendKeywords.map((entry) => {
+                    const active = keywordSet.has(normalizeKeyword(entry.keyword));
+                    return (
+                      <li key={entry.id} className="flex items-start gap-3 px-3 py-2">
+                        <span className="w-6 shrink-0 pt-0.5 text-xs tabular-nums text-slate-400">#{entry.rank}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-slate-900">{entry.keyword}</span>
+                            <span className="rounded bg-white px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">{entry.niche}</span>
+                            <span className="text-[10px] uppercase tracking-wide text-slate-400">{entry.momentum}</span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-slate-500">{entry.why}</p>
+                        </div>
+                        <button type="button" disabled={busy || active || keywords.length >= MAX_KEYWORDS} className={`shrink-0 rounded-md border px-2 py-1 text-xs ${active ? "border-teal-200 bg-teal-50 text-teal-800" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400 hover:text-teal-900"} disabled:opacity-50`} onClick={() => addKeywords([entry.keyword])} title={entry.sources.join(", ")}>
+                          {active ? "Added" : "Add"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </div>
 
           {recentKeywords.length > 0 && (
@@ -469,6 +658,8 @@ export default function ResearchPage() {
             onChange={(e) => {
               const id = e.target.value;
               setSelectedRunId(id);
+              setRecentlyProcessed(new Set());
+              setMatchSummary(null);
               loadIdeas(id || undefined, statusFilter);
             }}
           >

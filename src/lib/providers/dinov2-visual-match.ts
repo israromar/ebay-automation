@@ -2,7 +2,7 @@ import { cosineSimilarity, meanPoolEmbedding, visualSimilarityToScore } from "@/
 import { loadTransformers } from "./load-transformers";
 import type { VisualMatchComparison, VisualMatchProvider } from "./visual-match";
 
-type FeatureExtractor = (input: string | Uint8Array, options?: { pooling?: string; normalize?: boolean }) => Promise<unknown>;
+type FeatureExtractor = (input: string | Blob, options?: { pooling?: string; normalize?: boolean }) => Promise<unknown>;
 
 const DEFAULT_MODEL = "Xenova/dinov2-small";
 
@@ -89,10 +89,10 @@ export class Dinov2VisualMatchProvider implements VisualMatchProvider {
     await this.ensureExtractor();
     if (!this.extractor) return null;
 
-    const bytes = await this.fetchImageBytes(imageUrl);
-    if (!bytes) return null;
+    const image = await this.fetchImageBlob(imageUrl);
+    if (!image) return null;
 
-    const output = await this.extractor(bytes, { pooling: "mean", normalize: true });
+    const output = await this.extractor(image, { pooling: "mean", normalize: true });
     const embedding = meanPoolEmbedding(output as never);
     if (embedding.length === 0) return null;
 
@@ -123,14 +123,14 @@ export class Dinov2VisualMatchProvider implements VisualMatchProvider {
     }
   }
 
-  private async fetchImageBytes(imageUrl: string): Promise<Uint8Array | null> {
+  private async fetchImageBlob(imageUrl: string): Promise<Blob | null> {
     try {
       const res = await fetch(imageUrl, {
         headers: { "User-Agent": "ebay-automation-visual-match/0.1" },
         signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) return null;
-      return new Uint8Array(await res.arrayBuffer());
+      return res.blob();
     } catch {
       return null;
     }

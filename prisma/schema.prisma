@@ -198,6 +198,34 @@ model TrendIdea {
   @@index([ebayItemId])
 }
 
+model TrendKeywordSnapshot {
+  id           String         @id @default(cuid())
+  market       String         @default("US")
+  version      String
+  researchedAt DateTime
+  sourcesJson  String
+  createdAt    DateTime       @default(now())
+  keywords     TrendKeyword[]
+
+  @@index([market, createdAt])
+}
+
+model TrendKeyword {
+  id           String               @id @default(cuid())
+  snapshotId   String
+  snapshot     TrendKeywordSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  rank         Int
+  keyword      String
+  niche        String
+  momentum     String
+  sourcesJson  String
+  why          String
+  createdAt    DateTime             @default(now())
+
+  @@index([snapshotId, rank])
+  @@index([snapshotId, niche])
+}
+
 model SourceProduct {
   id          String           @id @default(cuid())
   candidateId String

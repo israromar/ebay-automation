@@ -27,7 +27,8 @@ export function createEbayProvider(): EbayProvider {
   });
 }
 
-export function createVisualMatchProvider(): VisualMatchProvider {
+export function createVisualMatchProvider(): VisualMatchProvider | undefined {
+  if (process.env.VISUAL_MATCH_ENABLED === "false") return undefined;
   return new Dinov2VisualMatchProvider();
 }
 

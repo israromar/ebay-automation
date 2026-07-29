@@ -8,17 +8,24 @@ function createPrismaClient() {
   });
 }
 
-function hasTrendDelegates(client: PrismaClient): boolean {
-  return typeof (client as { trendIdea?: { findMany?: unknown } }).trendIdea?.findMany === "function" && typeof (client as { trendResearchRun?: { findMany?: unknown } }).trendResearchRun?.findMany === "function";
+function hasRequiredDelegates(client: PrismaClient): boolean {
+  const c = client as {
+    trendIdea?: { findMany?: unknown };
+    trendResearchRun?: { findMany?: unknown };
+    trendKeyword?: { findMany?: unknown };
+    trendKeywordSnapshot?: { findFirst?: unknown };
+  };
+  return typeof c.trendIdea?.findMany === "function" && typeof c.trendResearchRun?.findMany === "function" && typeof c.trendKeyword?.findMany === "function" && typeof c.trendKeywordSnapshot?.findFirst === "function";
 }
 
 function getPrisma(): PrismaClient {
   const existing = globalForPrisma.prisma;
   // After `prisma generate`, Next HMR can keep a pre-schema PrismaClient on globalThis.
-  if (existing && hasTrendDelegates(existing)) {
+  if (existing && hasRequiredDelegates(existing)) {
     return existing;
   }
   if (existing) {
+    globalForPrisma.prisma = undefined;
     void existing.$disconnect().catch(() => undefined);
   }
   const client = createPrismaClient();
@@ -28,4 +35,14 @@ function getPrisma(): PrismaClient {
   return client;
 }
 
-export const prisma = getPrisma();
+/**
+ * Lazy proxy so each access re-validates after schema regenerate.
+ * Avoids sticky HMR singletons missing new model delegates.
+ */
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const client = getPrisma();
+    const value = Reflect.get(client, prop, receiver);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});

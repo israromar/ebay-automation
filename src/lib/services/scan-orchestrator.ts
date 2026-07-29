@@ -3,6 +3,7 @@ import { calculateProfit, formatMinor } from "@/lib/domain/profit";
 import { buildAliExpressSearchQueries, candidateFingerprint, scoreProductMatch } from "@/lib/domain/matching";
 import { qualifyAliExpressProduct } from "@/lib/domain/qualification";
 import { applyVisualScoresToRankedSources, rankAliExpressSources } from "@/lib/domain/source-ranking";
+import { deriveTrendIdeaMatchStatus } from "@/lib/domain/trend-match-status";
 import { DEFAULT_VISUAL_MATCH_FLOOR } from "@/lib/domain/visual-matching";
 import { DEFAULT_RULES, type AliExpressProduct, type CandidateStatus, type EbayListing, type QualificationRules, type RejectionCode } from "@/lib/domain/types";
 import type { ExportCandidateRow } from "@/lib/export/types";
@@ -211,8 +212,13 @@ export class ScanOrchestrator {
         };
         const candidate = await this.processEbaySeededProduct(scan.id, idea.searchKeyword ?? idea.title.slice(0, 80), listing, { activeListingCount: idea.activeListingCount });
 
-        // Attach = matched for review. Low confidence still AE_MATCHED if an AE product was kept.
-        const ideaStatus = candidate.status === "ALIEXPRESS_REJECTED" || !candidate.aliexpressProductId ? "REJECTED" : "AE_MATCHED";
+        const ideaStatus = deriveTrendIdeaMatchStatus({
+          aliexpressProductId: candidate.aliexpressProductId,
+          matchConfidence: candidate.matchConfidence,
+          candidateStatus: candidate.status,
+          rejectionReasonsJson: candidate.rejectionReasonsJson,
+          minimumMatchConfidence: this.rules.minimumMatchConfidence,
+        });
 
         await prisma.trendIdea.update({
           where: { id: idea.id },
@@ -521,10 +527,13 @@ export class ScanOrchestrator {
 
     const shortlist = rankedText.slice(0, 20);
     let rankedSources = shortlist;
-    if (this.deps.visualMatch && ebay.imageUrl && shortlist.length > 0) {
+    let visualAttempted = false;
+    let visualAvailableCount = 0;
+    if (this.deps.visualMatch && shortlist.length > 0) {
+      visualAttempted = true;
       const visuals = [];
       for (const entry of shortlist) {
-        if (!entry.product.imageUrl) {
+        if (!ebay.imageUrl || !entry.product.imageUrl) {
           visuals.push({
             productId: entry.product.productId,
             score: 0,
@@ -534,6 +543,15 @@ export class ScanOrchestrator {
           continue;
         }
         const comparison = await this.deps.visualMatch.compareImages(ebay.imageUrl, entry.product.imageUrl);
+        if (comparison.available) {
+          visualAvailableCount += 1;
+        } else {
+          logWarn("visual_match_unavailable", {
+            provider: this.deps.visualMatch.name,
+            productId: entry.product.productId,
+            reason: comparison.reason,
+          });
+        }
         visuals.push({
           productId: entry.product.productId,
           score: comparison.score,
@@ -544,6 +562,7 @@ export class ScanOrchestrator {
       rankedSources = applyVisualScoresToRankedSources(shortlist, visuals, {
         visualFloor: DEFAULT_VISUAL_MATCH_FLOOR,
         ebayPriceMinor: ebay.priceMinor,
+        requireVisual: visualAvailableCount > 0,
       });
     }
 
@@ -553,7 +572,13 @@ export class ScanOrchestrator {
 
     if (!selectedSource) {
       status = "NEEDS_MANUAL_VALIDATION";
-      rejectionCodes.push(rankedText.length > 0 && shortlist.length > 0 ? "VISUAL_MATCH_TOO_LOW" : "NO_QUALIFIED_ALIEXPRESS_SOURCE");
+      if (!visualAttempted) {
+        rejectionCodes.push("NO_QUALIFIED_ALIEXPRESS_SOURCE");
+      } else if (visualAvailableCount === 0) {
+        rejectionCodes.push("VISUAL_MATCH_UNAVAILABLE");
+      } else {
+        rejectionCodes.push("VISUAL_MATCH_TOO_LOW");
+      }
     } else if (topConfidence < this.rules.minimumMatchConfidence) {
       status = "NEEDS_MANUAL_VALIDATION";
       rejectionCodes.push("MATCH_CONFIDENCE_TOO_LOW");

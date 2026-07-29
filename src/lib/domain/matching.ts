@@ -75,9 +75,20 @@ export interface MatchResult {
 
 const ACCESSORY_PATTERNS = [/\b(?:case|cover|shell|skin|protector)\s+(?:cover\s+)?for\b/, /\bprotective\s+(?:case|cover|shell)\b/, /\b(?:replacement|spare)\b/, /\b(?:charger|cable)\s+only\b/, /\b(?:holder|storage box)\b/];
 
+const PRODUCT_CONTEXT_PATTERNS = [
+  { id: "sleep_wellness", pattern: /\b(?:sleep|night|snor\w*|breath\w*|nasal|nose|oral|lip|bedtime)\b/ },
+  { id: "textile_sewing", pattern: /\b(?:pant|pants|hem|hemming|fabric|sewing|iron|ironing|garment|dress|jeans|textile)\b/ },
+];
+
 export function detectAccessory(title: string): boolean {
   const n = normalizeTitle(title);
   return ACCESSORY_PATTERNS.some((pattern) => pattern.test(n));
+}
+
+function hasProductContextMismatch(sourceTitle: string, candidateTitle: string): boolean {
+  const sourceContexts = PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(sourceTitle))).map(({ id }) => id);
+  const candidateContexts = PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(candidateTitle))).map(({ id }) => id);
+  return sourceContexts.length > 0 && candidateContexts.length > 0 && !sourceContexts.some((context) => candidateContexts.includes(context));
 }
 
 export function scoreProductMatch(source: MatchAttributes, ebay: MatchAttributes): MatchResult {
@@ -103,6 +114,11 @@ export function scoreProductMatch(source: MatchAttributes, ebay: MatchAttributes
   if (sourceAccessory !== ebayAccessory) {
     hardReject = true;
     reasons.push("accessory_vs_main");
+  }
+
+  if (hasProductContextMismatch(source.title, ebay.title)) {
+    hardReject = true;
+    reasons.push("product_context_mismatch");
   }
 
   if (source.model && ebay.model && source.model.toLowerCase() !== ebay.model.toLowerCase()) {
