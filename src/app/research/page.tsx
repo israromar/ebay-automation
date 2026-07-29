@@ -52,20 +52,19 @@ function money(minor: number | null | undefined) {
   return `$${(minor / 100).toFixed(2)}`;
 }
 
-function MatchResultImage({ primary, fallback }: { primary: string | null | undefined; fallback: string | null | undefined }) {
-  const [src, setSrc] = useState(primary ?? fallback ?? null);
+function MatchResultImage({ src: imageUrl }: { src: string | null | undefined }) {
+  const [src, setSrc] = useState(imageUrl ?? null);
 
   useEffect(() => {
-    setSrc(primary ?? fallback ?? null);
-  }, [primary, fallback]);
+    setSrc(imageUrl ?? null);
+  }, [imageUrl]);
 
   if (!src) {
-    return <div className="h-12 w-12 shrink-0 rounded bg-slate-100" aria-hidden="true" />;
+    return <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400">No AE image</div>;
   }
 
-  // AliExpress occasionally blocks browser hotlinks, so fall back to the eBay image.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" className="h-12 w-12 shrink-0 rounded object-cover" onError={() => setSrc(src !== fallback ? (fallback ?? null) : null)} />;
+  return <img src={src} alt="" className="h-12 w-12 shrink-0 rounded object-cover" onError={() => setSrc(null)} />;
 }
 
 function isMatchableIdea(idea: TrendIdea) {
@@ -442,7 +441,7 @@ export default function ResearchPage() {
           <div className="grid gap-2 p-3 md:grid-cols-2">
             {matchSummary.map((idea) => (
               <div key={idea.id} className="flex min-w-0 items-center gap-3 rounded-md border border-emerald-200 bg-white p-3">
-                <MatchResultImage primary={idea.aeMatch?.imageUrl} fallback={idea.imageUrl} />
+                <MatchResultImage src={idea.aeMatch?.imageUrl} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-900">{idea.aeMatch?.title ?? idea.title}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
