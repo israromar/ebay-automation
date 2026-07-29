@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 
 const nav = [
   { href: "/", label: "Overview" },
+  { href: "/research", label: "Research" },
   { href: "/candidates", label: "Candidates" },
   { href: "/scans", label: "Scans" },
   { href: "/settings", label: "Settings" },
@@ -22,18 +23,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="border-b border-slate-200 bg-white">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-teal-700">
-                Marketplace research
-              </p>
+              <p className="text-xs font-medium uppercase tracking-wide text-teal-700">Marketplace research</p>
               <h1 className="text-lg font-semibold">Product Research Analyzer</h1>
             </div>
             <nav className="flex flex-wrap gap-3 text-sm">
               {nav.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-md px-2 py-1 text-slate-700 hover:bg-slate-100"
-                >
+                <Link key={item.href} href={item.href} className="rounded-md px-2 py-1 text-slate-700 hover:bg-slate-100">
                   {item.label}
                 </Link>
               ))}

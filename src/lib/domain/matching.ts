@@ -7,6 +7,29 @@ export function normalizeTitle(title: string): string {
     .trim();
 }
 
+const SEARCH_STOP_WORDS = new Set(["with", "for", "and", "the", "new", "hot", "sale", "free", "shipping", "pcs", "pack", "lot", "usb", "ml", "oz", "ft", "brand"]);
+
+function searchTokens(title: string): string[] {
+  return normalizeTitle(title)
+    .split(" ")
+    .filter((token) => token.length > 2 && !SEARCH_STOP_WORDS.has(token) && !/^\d+$/.test(token));
+}
+
+/** Short AE search query — full eBay marketing titles often return 0 affiliate hits. */
+export function buildAliExpressSearchQuery(title: string, seedKeyword?: string): string {
+  const seed = seedKeyword?.trim();
+  if (seed && seed.length >= 3 && seed.length <= 60) return seed;
+  const tokens = searchTokens(title);
+  return tokens.slice(0, 5).join(" ") || title.slice(0, 40).trim();
+}
+
+/** Query variants broaden discovery when one Affiliate API search has fewer than 150 results. */
+export function buildAliExpressSearchQueries(title: string, seedKeyword?: string): string[] {
+  const tokens = searchTokens(title);
+  const queries = [buildAliExpressSearchQuery(title, seedKeyword), tokens.slice(0, 5).join(" "), tokens.slice(5, 10).join(" ")];
+  return [...new Set(queries.filter((query) => query.length >= 3))];
+}
+
 export function extractPackQuantity(title: string): number | null {
   const m = title.match(/\b(\d+)\s*(pcs|pc|pack|pcs\/lot|pieces?)\b/i);
   if (m) return Number(m[1]);
@@ -50,11 +73,11 @@ export interface MatchResult {
   reasons: string[];
 }
 
-const ACCESSORY_WORDS = ["case", "cover", "replacement", "spare", "part", "charger only", "cable only"];
+const ACCESSORY_PATTERNS = [/\b(?:case|cover|shell|skin|protector)\s+(?:cover\s+)?for\b/, /\bprotective\s+(?:case|cover|shell)\b/, /\b(?:replacement|spare)\b/, /\b(?:charger|cable)\s+only\b/, /\b(?:holder|storage box)\b/];
 
 export function detectAccessory(title: string): boolean {
   const n = normalizeTitle(title);
-  return ACCESSORY_WORDS.some((w) => n.includes(w));
+  return ACCESSORY_PATTERNS.some((pattern) => pattern.test(n));
 }
 
 export function scoreProductMatch(source: MatchAttributes, ebay: MatchAttributes): MatchResult {
@@ -125,16 +148,60 @@ export function scoreProductMatch(source: MatchAttributes, ebay: MatchAttributes
   return { confidence: score, hardReject: false, reasons };
 }
 
-export function candidateFingerprint(parts: {
-  aliexpressProductId?: string;
-  ebayItemId?: string;
-  title?: string;
-}): string {
-  const base = [
-    parts.aliexpressProductId ?? "",
-    parts.ebayItemId ?? "",
-    normalizeTitle(parts.title ?? ""),
-  ].join("|");
+function tokenContainment(sourceTitle: string, candidateTitle: string): number {
+  const sourceTokens = tokenSet(sourceTitle);
+  const candidateTokens = tokenSet(candidateTitle);
+  const denominator = Math.min(sourceTokens.size, candidateTokens.size);
+  if (denominator === 0) return 0;
+
+  let intersection = 0;
+  for (const token of sourceTokens) {
+    if (candidateTokens.has(token)) intersection += 1;
+  }
+  return intersection / denominator;
+}
+
+function keywordCoverage(keyword: string, candidateTitle: string): number {
+  const keywordTokens = tokenSet(keyword);
+  if (keywordTokens.size === 0) return 0;
+  const candidateTokens = tokenSet(candidateTitle);
+
+  let matched = 0;
+  for (const token of keywordTokens) {
+    if (candidateTokens.has(token)) matched += 1;
+  }
+  return matched / keywordTokens.size;
+}
+
+/**
+ * Cross-marketplace sourcing score. AE/eBay titles use different marketing
+ * words, so containment is more useful here than symmetric Jaccard alone.
+ */
+export function scoreAliExpressSourceMatch(ebay: MatchAttributes, aliexpress: MatchAttributes, searchKeyword: string): MatchResult {
+  const safetyMatch = scoreProductMatch(ebay, aliexpress);
+  if (safetyMatch.hardReject) return safetyMatch;
+
+  const reasons = [...safetyMatch.reasons];
+  const containment = tokenContainment(ebay.title, aliexpress.title);
+  const coverage = keywordCoverage(searchKeyword, aliexpress.title);
+  let score = Math.round(containment * 65 + coverage * 25);
+
+  if (ebay.priceMinor != null && aliexpress.priceMinor != null && aliexpress.priceMinor > 0 && aliexpress.priceMinor < ebay.priceMinor) {
+    score += 10;
+    reasons.push("source_price_below_ebay");
+  }
+  if (coverage === 1) reasons.push("search_keyword_match");
+  if (containment >= 0.5) reasons.push("strong_title_containment");
+
+  return {
+    confidence: Math.max(0, Math.min(100, score)),
+    hardReject: false,
+    reasons,
+  };
+}
+
+export function candidateFingerprint(parts: { aliexpressProductId?: string; ebayItemId?: string; title?: string }): string {
+  const base = [parts.aliexpressProductId ?? "", parts.ebayItemId ?? "", normalizeTitle(parts.title ?? "")].join("|");
   let hash = 0;
   for (let i = 0; i < base.length; i++) {
     hash = (hash * 31 + base.charCodeAt(i)) | 0;

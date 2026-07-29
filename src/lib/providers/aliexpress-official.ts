@@ -1,9 +1,5 @@
 import { createHash, createHmac } from "crypto";
-import type {
-  AliExpressProduct,
-  AliExpressProductDetails,
-  ProductSearchInput,
-} from "@/lib/domain/types";
+import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
 import type { AliExpressProvider } from "./types";
 
 type GatewayParams = Record<string, string | number | boolean | undefined | null>;
@@ -30,19 +26,12 @@ function cleanParams(params: GatewayParams): Record<string, string> {
 }
 
 /** TOP-style MD5 bookend signature used by Affiliate APIs. */
-export function signAliExpressParams(
-  params: Record<string, string>,
-  appSecret: string,
-  signMethod: "md5" | "hmac" | "sha256" = "md5",
-): string {
+export function signAliExpressParams(params: Record<string, string>, appSecret: string, signMethod: "md5" | "hmac" | "sha256" = "md5"): string {
   const sortedKeys = Object.keys(params).sort();
   const concatenated = sortedKeys.map((k) => `${k}${params[k]}`).join("");
 
   if (signMethod === "md5") {
-    return createHash("md5")
-      .update(`${appSecret}${concatenated}${appSecret}`, "utf8")
-      .digest("hex")
-      .toUpperCase();
+    return createHash("md5").update(`${appSecret}${concatenated}${appSecret}`, "utf8").digest("hex").toUpperCase();
   }
 
   if (signMethod === "hmac") {
@@ -59,34 +48,25 @@ function toMinorUnits(value: unknown): number {
 }
 
 function mapProduct(raw: Record<string, unknown>, source: string): AliExpressProduct {
-  const productId = String(
-    raw.product_id ?? raw.productId ?? raw.item_id ?? raw.itemId ?? "",
-  );
+  const productId = String(raw.product_id ?? raw.productId ?? raw.item_id ?? raw.itemId ?? "");
   const title = String(raw.product_title ?? raw.productTitle ?? raw.title ?? "Untitled");
-  const price =
-    raw.target_sale_price ??
-    raw.sale_price ??
-    raw.target_original_price ??
-    raw.original_price ??
-    0;
+  const price = raw.target_sale_price ?? raw.sale_price ?? raw.target_original_price ?? raw.original_price ?? 0;
   const ratingRaw = raw.evaluate_rate ?? raw.evaluateRate ?? raw.product_rating ?? raw.rating;
-  const rating =
-    ratingRaw == null
-      ? undefined
-      : Number(String(ratingRaw).replace("%", "")) > 5
-        ? Number(String(ratingRaw).replace("%", "")) / 20
-        : Number(ratingRaw);
+  const rating = ratingRaw == null ? undefined : Number(String(ratingRaw).replace("%", "")) > 5 ? Number(String(ratingRaw).replace("%", "")) / 20 : Number(ratingRaw);
   const reviewCount = raw.evaluation_count ?? raw.evaluationCount ?? raw.review_count;
   const orderCount = raw.lastest_volume ?? raw.latest_volume ?? raw.volume ?? raw.order_count;
-  const url =
-    String(raw.promotion_link ?? raw.product_detail_url ?? raw.detail_url ?? "") ||
-    (productId ? `https://www.aliexpress.com/item/${productId}.html` : "");
+  const url = String(raw.promotion_link ?? raw.product_detail_url ?? raw.detail_url ?? "") || (productId ? `https://www.aliexpress.com/item/${productId}.html` : "");
+  const smallImages = Array.isArray(raw.product_small_image_urls)
+    ? raw.product_small_image_urls
+    : [];
 
   return {
     productId,
     title,
     url,
-    imageUrl: String(raw.product_main_image_url ?? raw.product_small_image_urls?.[0] ?? raw.image_url ?? "") || undefined,
+    imageUrl:
+      String(raw.product_main_image_url ?? smallImages[0] ?? raw.image_url ?? "") ||
+      undefined,
     priceMinor: toMinorUnits(price),
     shippingMinor: undefined,
     currency: String(raw.target_sale_price_currency ?? raw.currency ?? "USD"),
@@ -107,16 +87,11 @@ function mapProduct(raw: Record<string, unknown>, source: string): AliExpressPro
 function extractProducts(payload: unknown): Record<string, unknown>[] {
   if (!payload || typeof payload !== "object") return [];
   const root = payload as Record<string, unknown>;
-  const response =
-    (root.aliexpress_affiliate_product_query_response as Record<string, unknown> | undefined) ??
-    (root.aliexpress_affiliate_productdetail_get_response as Record<string, unknown> | undefined) ??
-    root;
+  const response = (root.aliexpress_affiliate_product_query_response as Record<string, unknown> | undefined) ?? (root.aliexpress_affiliate_productdetail_get_response as Record<string, unknown> | undefined) ?? root;
 
   const respResult = (response.resp_result as Record<string, unknown> | undefined) ?? response;
   const result = (respResult.result as Record<string, unknown> | undefined) ?? respResult;
-  const products =
-    (result.products as { product?: unknown } | unknown[] | undefined) ??
-    (result.products as unknown);
+  const products = (result.products as { product?: unknown } | unknown[] | undefined) ?? (result.products as unknown);
 
   if (Array.isArray(products)) {
     return products.filter((p): p is Record<string, unknown> => !!p && typeof p === "object");
@@ -157,20 +132,32 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       throw new Error("AliExpressOfficialApiProvider: missing credentials");
     }
 
+    const requested = Math.min(Math.max(input.limit ?? 5, 1), 150);
+    const products = new Map<string, AliExpressProduct>();
+
+    for (let page = 1; products.size < requested; page += 1) {
+      const pageSize = Math.min(50, requested - products.size);
+      const pageProducts = await this.searchProductPage(input, page, pageSize);
+      for (const product of pageProducts) products.set(product.productId, product);
+      if (pageProducts.length < pageSize) break;
+    }
+
+    return [...products.values()].slice(0, requested);
+  }
+
+  private async searchProductPage(input: ProductSearchInput, page: number, pageSize: number): Promise<AliExpressProduct[]> {
     const body = await this.call("aliexpress.affiliate.product.query", {
       keywords: input.keyword,
-      page_no: 1,
-      page_size: Math.min(input.limit ?? 5, 50),
+      page_no: page,
+      page_size: pageSize,
       target_currency: input.currency ?? "USD",
       target_language: "EN",
       ship_to_country: input.shipToCountry ?? "US",
       tracking_id: this.config.trackingId ?? "default",
       sort: "LAST_VOLUME_DESC",
-      fields:
-        "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
+      fields: "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
     });
-
-    return extractProducts(body).map((p) => mapProduct(p, this.name));
+    return extractProducts(body).map((product) => mapProduct(product, this.name));
   }
 
   async getProductDetails(urlOrId: string): Promise<AliExpressProductDetails> {
@@ -185,8 +172,7 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       target_language: "EN",
       ship_to_country: "US",
       tracking_id: this.config.trackingId ?? "default",
-      fields:
-        "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
+      fields: "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
     });
 
     const products = extractProducts(body).map((p) => mapProduct(p, this.name));
@@ -225,12 +211,9 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       throw new Error(`AliExpress API non-JSON response (${res.status}): ${text.slice(0, 300)}`);
     }
 
-    const err =
-      (json as { error_response?: { code?: string; msg?: string; sub_msg?: string } }).error_response;
+    const err = (json as { error_response?: { code?: string; msg?: string; sub_msg?: string } }).error_response;
     if (err) {
-      throw new Error(
-        `AliExpress API error: ${err.code ?? "unknown"} ${err.msg ?? ""} ${err.sub_msg ?? ""}`.trim(),
-      );
+      throw new Error(`AliExpress API error: ${err.code ?? "unknown"} ${err.msg ?? ""} ${err.sub_msg ?? ""}`.trim());
     }
     if (!res.ok) {
       throw new Error(`AliExpress API HTTP ${res.status}: ${text.slice(0, 300)}`);

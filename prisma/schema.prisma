@@ -149,9 +149,53 @@ model ProductCandidate {
   manualReviews         ManualReview[]
   exportRecords         ExportRecord[]
   saleObservations      EbaySaleObservation[]
+  trendIdeas            TrendIdea[]
 
   @@index([fingerprint])
   @@index([status])
+}
+
+model TrendResearchRun {
+  id           String      @id @default(cuid())
+  workspaceId  String?
+  keywordsJson String
+  criteriaJson String
+  status       String      @default("PENDING")
+  startedAt    DateTime    @default(now())
+  finishedAt   DateTime?
+  ideas        TrendIdea[]
+}
+
+model TrendIdea {
+  id                   String            @id @default(cuid())
+  runId                String
+  run                  TrendResearchRun  @relation(fields: [runId], references: [id])
+  ebayItemId           String
+  title                String
+  ebayUrl              String?
+  imageUrl             String?
+  priceMinor           Int
+  currency             String            @default("USD")
+  categoryId           String?
+  searchKeyword        String?
+  clusterKey           String
+  activeListingCount   Int               @default(0)
+  priceMinMinor        Int?
+  priceMaxMinor        Int?
+  priceMedianMinor     Int?
+  score                Float
+  status               String            @default("DISCOVERED")
+  dataSource           String            @default("ebay_browse_proxy")
+  productCandidateId   String?
+  productCandidate     ProductCandidate? @relation(fields: [productCandidateId], references: [id])
+  rejectionReasonsJson String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([status])
+  @@index([runId])
+  @@index([clusterKey])
+  @@index([ebayItemId])
 }
 
 model SourceProduct {

@@ -1,10 +1,15 @@
 import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
 import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
+import { AliExpressOfficialApiProvider } from "@/lib/providers/aliexpress-official";
 import { CsvExporter } from "@/lib/export/csv";
 import { mkdtemp, readFile } from "fs/promises";
 import os from "os";
 import path from "path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("providers", () => {
   it("manual aliexpress search filters by keyword", async () => {
@@ -25,6 +30,41 @@ describe("providers", () => {
     const ebay = new EbayBrowseApiProvider({ clientId: "", clientSecret: "" });
     const listings = await ebay.searchProducts({ keyword: "portable blender", limit: 5 });
     expect(listings.length).toBeGreaterThan(0);
+  });
+
+  it("paginates official AliExpress search to 150 products", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const params = new URLSearchParams(String(init?.body));
+      const page = Number(params.get("page_no"));
+      const size = Number(params.get("page_size"));
+      const products = Array.from({ length: size }, (_, index) => ({
+        product_id: `${page}${String(index).padStart(10, "0")}`,
+        product_title: `Product ${page}-${index}`,
+        sale_price: "10",
+        evaluate_rate: "98%",
+        lastest_volume: "100",
+      }));
+      return new Response(
+        JSON.stringify({
+          aliexpress_affiliate_product_query_response: {
+            resp_result: { result: { products: { product: products } } },
+          },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = new AliExpressOfficialApiProvider({
+      appKey: "key",
+      appSecret: "secret",
+    });
+    const products = await provider.searchProducts({
+      keyword: "portable blender",
+      limit: 150,
+    });
+
+    expect(products).toHaveLength(150);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 

@@ -38,29 +38,14 @@ function UrlActions({ label, url }: { label: string; url?: string | null }) {
   return (
     <div className="min-w-0 space-y-1">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <a
-        href={value}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={value}
-        className="block truncate text-teal-800 hover:underline"
-      >
+      <a href={value} target="_blank" rel="noopener noreferrer" title={value} className="block truncate text-teal-800 hover:underline">
         {value}
       </a>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={copy}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
-        >
+        <button type="button" onClick={copy} className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
           {copied ? "Copied" : "Copy URL"}
         </button>
-        <a
-          href={value}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
-        >
+        <a href={value} target="_blank" rel="noopener noreferrer" className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
           Open
         </a>
       </div>
@@ -155,48 +140,21 @@ export default function CandidateDetailPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
         <h3 className="font-medium">Profit breakdown</h3>
-        {profit ? (
-          <pre className="mt-2 overflow-x-auto rounded bg-slate-50 p-3 text-xs">
-            {JSON.stringify(profit, null, 2)}
-          </pre>
-        ) : (
-          <p className="mt-2 text-slate-500">No calculation stored.</p>
-        )}
+        {profit ? <pre className="mt-2 overflow-x-auto rounded bg-slate-50 p-3 text-xs">{JSON.stringify(profit, null, 2)}</pre> : <p className="mt-2 text-slate-500">No calculation stored.</p>}
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
         <h3 className="font-medium">Rejection / reason codes</h3>
-        <pre className="mt-2 overflow-x-auto rounded bg-slate-50 p-3 text-xs">
-          {String(candidate.rejectionReasonsJson ?? "[]")}
-        </pre>
+        <pre className="mt-2 overflow-x-auto rounded bg-slate-50 p-3 text-xs">{String(candidate.rejectionReasonsJson ?? "[]")}</pre>
       </section>
 
       <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
         <h3 className="font-medium">Manual demand validation</h3>
-        <p className="mt-1 text-slate-700">
-          Use when Marketplace Insights / licensed sold-history is unavailable. Approval requires
-          verified demand.
-        </p>
+        <p className="mt-1 text-slate-700">Use when Marketplace Insights / licensed sold-history is unavailable. Approval requires verified demand.</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input
-            className="rounded-md border border-slate-300 px-3 py-2"
-            value={sold}
-            onChange={(e) => setSold(e.target.value)}
-            aria-label="Sold last 30 days"
-            placeholder="Sold last 30 days"
-          />
-          <input
-            className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2"
-            value={evidence}
-            onChange={(e) => setEvidence(e.target.value)}
-            aria-label="Evidence URL"
-            placeholder="Evidence URL"
-          />
-          <button
-            type="button"
-            onClick={submitDemand}
-            className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white"
-          >
+          <input className="rounded-md border border-slate-300 px-3 py-2" value={sold} onChange={(e) => setSold(e.target.value)} aria-label="Sold last 30 days" placeholder="Sold last 30 days" />
+          <input className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2" value={evidence} onChange={(e) => setEvidence(e.target.value)} aria-label="Evidence URL" placeholder="Evidence URL" />
+          <button type="button" onClick={submitDemand} className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white">
             Apply demand
           </button>
         </div>
