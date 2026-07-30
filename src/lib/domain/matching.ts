@@ -23,27 +23,36 @@ export function buildAliExpressSearchQuery(title: string, seedKeyword?: string):
   return tokens.slice(0, 5).join(" ") || title.slice(0, 40).trim();
 }
 
-/** Query variants broaden discovery when one Affiliate API search has fewer than 150 results. */
+/** Query variants combine exact quantity/attributes with broader product terms. */
 export function buildAliExpressSearchQueries(title: string, seedKeyword?: string): string[] {
   const tokens = searchTokens(title);
-  const queries = [buildAliExpressSearchQuery(title, seedKeyword), tokens.slice(0, 5).join(" "), tokens.slice(5, 10).join(" ")];
+  const seed = seedKeyword?.trim();
+  const packQuantity = extractPackQuantity(title);
+  const titleHasSet = /\b(?:set|kit)\b/i.test(title);
+  const descriptiveTokens = tokens.filter((token) => token !== "piece");
+  const quantityCore = seed || descriptiveTokens.slice(0, 4).join(" ");
+  const quantityQuery = (packQuantity ?? 0) > 1 && quantityCore ? `${packQuantity}pcs ${quantityCore}${titleHasSet && !/\b(?:set|kit)\b/i.test(quantityCore) ? " set" : ""}` : "";
+  const queries = [quantityQuery, descriptiveTokens.slice(0, 5).join(" "), buildAliExpressSearchQuery(title, seedKeyword), descriptiveTokens.slice(5, 10).join(" ")];
   return [...new Set(queries.filter((query) => query.length >= 3))];
 }
 
 export function extractPackQuantity(title: string): number | null {
-  const m = title.match(/\b(\d+)\s*(pcs|pc|pack|pcs\/lot|pieces?)\b/i);
+  const normalized = normalizeTitle(title.replace(/[\u2010-\u2015\u2212]/g, "-"));
+  const m = normalized.match(/\b(\d+)\s*(pcs|pc|pack|pcs lot|pieces?)\b/);
   if (m) return Number(m[1]);
-  if (/\b(set of|lot of)\s*(\d+)\b/i.test(title)) {
-    const m2 = title.match(/\b(set of|lot of)\s*(\d+)\b/i);
-    return m2 ? Number(m2[2]) : null;
-  }
-  return 1;
+  const setOf = normalized.match(/\b(?:set|lot)\s+of\s+(\d+)\b/);
+  return setOf ? Number(setOf[1]) : null;
 }
 
 export function tokenSet(title: string): Set<string> {
   return new Set(
     normalizeTitle(title)
       .split(" ")
+      .map((token) => {
+        if (/^\d+(?:pcs?|pieces?)$/.test(token)) return "piece";
+        if (token.length > 3 && token.endsWith("s") && !token.endsWith("ss") && token !== "fitness") return token.slice(0, -1);
+        return token;
+      })
       .filter((t) => t.length > 2),
   );
 }
@@ -197,10 +206,21 @@ export function scoreAliExpressSourceMatch(ebay: MatchAttributes, aliexpress: Ma
   const safetyMatch = scoreProductMatch(ebay, aliexpress);
   if (safetyMatch.hardReject) return safetyMatch;
 
+  const ebayPack = ebay.packQuantity ?? extractPackQuantity(ebay.title);
+  const aliexpressPack = aliexpress.packQuantity ?? extractPackQuantity(aliexpress.title);
+  if ((ebayPack ?? 0) > 1 && aliexpressPack == null) {
+    return { confidence: 0, hardReject: true, reasons: ["pack_quantity_missing"] };
+  }
+
   const reasons = [...safetyMatch.reasons];
   const containment = tokenContainment(ebay.title, aliexpress.title);
   const coverage = keywordCoverage(searchKeyword, aliexpress.title);
   let score = Math.round(containment * 65 + coverage * 25);
+
+  if ((ebayPack ?? 0) > 1 && ebayPack === aliexpressPack) {
+    score += 20;
+    reasons.push("pack_quantity_match");
+  }
 
   if (ebay.priceMinor != null && aliexpress.priceMinor != null && aliexpress.priceMinor > 0 && aliexpress.priceMinor < ebay.priceMinor) {
     score += 10;

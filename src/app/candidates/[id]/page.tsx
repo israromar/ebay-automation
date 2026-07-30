@@ -1,7 +1,8 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { buildEbayPurchaseHistoryUrl, buildEbaySoldSearchUrl, dollarsToMinor, minorToDollarsInput } from "@/lib/domain/ebay-sold-history";
 
 function UrlActions({ label, url }: { label: string; url?: string | null }) {
   const [copied, setCopied] = useState(false);
@@ -14,7 +15,6 @@ function UrlActions({ label, url }: { label: string; url?: string | null }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Fallback for older browsers / insecure contexts
       const ta = document.createElement("textarea");
       ta.value = value;
       document.body.appendChild(ta);
@@ -62,13 +62,24 @@ export default function CandidateDetailPage() {
   const params = useParams<{ id: string }>();
   const [candidate, setCandidate] = useState<Record<string, unknown> | null>(null);
   const [sold, setSold] = useState("5");
+  const [avgSale, setAvgSale] = useState("");
+  const [medianSale, setMedianSale] = useState("");
   const [evidence, setEvidence] = useState("");
   const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     const res = await fetch(`/api/candidates/${params.id}`);
     const json = await res.json();
-    setCandidate(json.candidate);
+    const next = json.candidate as Record<string, unknown>;
+    setCandidate(next);
+    if (typeof next.soldLast30Days === "number") setSold(String(next.soldLast30Days));
+    setAvgSale(minorToDollarsInput(typeof next.avgCompletedSaleMinor === "number" ? next.avgCompletedSaleMinor : null));
+    setMedianSale(minorToDollarsInput(typeof next.medianCompletedSaleMinor === "number" ? next.medianCompletedSaleMinor : null));
+    if (!evidence && typeof next.ebayUrl === "string") {
+      const history = buildEbayPurchaseHistoryUrl(String(next.ebayItemId ?? next.ebayUrl));
+      if (history) setEvidence(history);
+    }
   }
 
   useEffect(() => {
@@ -76,29 +87,49 @@ export default function CandidateDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
+  const soldHistoryLinks = useMemo(() => {
+    if (!candidate) return { purchaseHistory: null as string | null, soldSearch: "" };
+    const purchaseHistory = buildEbayPurchaseHistoryUrl(String(candidate.ebayItemId ?? candidate.ebayUrl ?? ""));
+    const keyword = String(candidate.searchKeyword || candidate.productName || "product");
+    return {
+      purchaseHistory,
+      soldSearch: buildEbaySoldSearchUrl(keyword),
+    };
+  }, [candidate]);
+
   async function submitDemand() {
     setMsg("");
-    const res = await fetch(`/api/candidates/${params.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        soldLast30Days: Number(sold),
-        evidenceUrl: evidence || undefined,
-        verifiedBy: "dashboard-operator",
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setMsg(JSON.stringify(json));
-      return;
+    setBusy(true);
+    try {
+      const avgCompletedSaleMinor = dollarsToMinor(avgSale) ?? undefined;
+      const medianCompletedSaleMinor = dollarsToMinor(medianSale) ?? undefined;
+      const res = await fetch(`/api/candidates/${params.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          soldLast30Days: Number(sold),
+          avgCompletedSaleMinor,
+          medianCompletedSaleMinor,
+          evidenceUrl: evidence || soldHistoryLinks.purchaseHistory || undefined,
+          verifiedBy: "dashboard-operator",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setMsg(JSON.stringify(json));
+        return;
+      }
+      setMsg(`Updated status: ${json.candidate.status}`);
+      await load();
+    } finally {
+      setBusy(false);
     }
-    setMsg(`Updated status: ${json.candidate.status}`);
-    await load();
   }
 
   if (!candidate) return <p className="text-sm text-slate-600">Loading…</p>;
 
   const profit = (candidate.profitCalculations as Array<Record<string, unknown>>)?.[0];
+  const needsDemand = candidate.demandVerified !== true || String(candidate.status) === "NEEDS_MANUAL_VALIDATION";
 
   return (
     <div className="space-y-6">
@@ -130,6 +161,7 @@ export default function CandidateDetailPage() {
             <ul className="space-y-1">
               <li>Confidence: {String(candidate.matchConfidence ?? "—")}</li>
               <li>Current price: {money(candidate.ebayCurrentPriceMinor)}</li>
+              <li>Avg completed sale: {money(candidate.avgCompletedSaleMinor)}</li>
               <li>Active listings: {String(candidate.activeListingCount ?? "—")}</li>
               <li>Sold last 30d: {String(candidate.soldLast30Days ?? "—")}</li>
               <li>Demand verified: {String(candidate.demandVerified)}</li>
@@ -148,14 +180,54 @@ export default function CandidateDetailPage() {
         <pre className="mt-2 overflow-x-auto rounded bg-slate-50 p-3 text-xs">{String(candidate.rejectionReasonsJson ?? "[]")}</pre>
       </section>
 
-      <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
-        <h3 className="font-medium">Manual demand validation</h3>
-        <p className="mt-1 text-slate-700">Use when Marketplace Insights / licensed sold-history is unavailable. Approval requires verified demand.</p>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input className="rounded-md border border-slate-300 px-3 py-2" value={sold} onChange={(e) => setSold(e.target.value)} aria-label="Sold last 30 days" placeholder="Sold last 30 days" />
-          <input className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2" value={evidence} onChange={(e) => setEvidence(e.target.value)} aria-label="Evidence URL" placeholder="Evidence URL" />
-          <button type="button" onClick={submitDemand} className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white">
-            Apply demand
+      <section className={`rounded-lg border p-4 text-sm ${needsDemand ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
+        <h3 className="font-medium">Sold history / demand validation</h3>
+        <p className="mt-1 text-slate-700">Browse API cannot supply sold counts. Open eBay sold history while logged in, then enter the numbers here. Approval requires verified demand.</p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {soldHistoryLinks.purchaseHistory ? (
+            <a href={soldHistoryLinks.purchaseHistory} target="_blank" rel="noopener noreferrer" className="rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+              Open listing sold history
+            </a>
+          ) : null}
+          <a href={soldHistoryLinks.soldSearch} target="_blank" rel="noopener noreferrer" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50">
+            Open sold+completed search
+          </a>
+          {soldHistoryLinks.purchaseHistory ? (
+            <button type="button" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs hover:bg-slate-50" onClick={() => setEvidence(soldHistoryLinks.purchaseHistory ?? "")}>
+              Use history URL as evidence
+            </button>
+          ) : null}
+        </div>
+
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-slate-700">
+          <li>Click “Open listing sold history” (sign in to eBay if prompted).</li>
+          <li>Count sales in the last ~30 days and note typical sold price.</li>
+          <li>Enter sold count + prices below and apply.</li>
+        </ol>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Sold last 30 days</span>
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={sold} onChange={(e) => setSold(e.target.value)} inputMode="numeric" />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Avg sold price ($)</span>
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={avgSale} onChange={(e) => setAvgSale(e.target.value)} placeholder="e.g. 24.99" inputMode="decimal" />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Median sold price ($)</span>
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={medianSale} onChange={(e) => setMedianSale(e.target.value)} placeholder="optional" inputMode="decimal" />
+          </label>
+          <label className="space-y-1 sm:col-span-2 lg:col-span-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Evidence URL</span>
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="Sold history URL" />
+          </label>
+        </div>
+
+        <div className="mt-3">
+          <button type="button" disabled={busy} onClick={submitDemand} className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white disabled:opacity-60">
+            {busy ? "Applying…" : "Apply demand"}
           </button>
         </div>
         {msg ? <p className="mt-2">{msg}</p> : null}

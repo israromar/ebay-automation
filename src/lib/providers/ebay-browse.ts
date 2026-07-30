@@ -1,10 +1,5 @@
-import type {
-  EbayDemandInput,
-  EbayDemandResult,
-  EbayListing,
-  EbayListingDetails,
-  ProductSearchInput,
-} from "@/lib/domain/types";
+import type { EbayDemandInput, EbayDemandResult, EbayListing, EbayListingDetails, ProductSearchInput } from "@/lib/domain/types";
+import { EbayMarketplaceInsightsProvider } from "./ebay-marketplace-insights";
 import type { EbayProvider } from "./types";
 
 interface TokenCache {
@@ -19,6 +14,7 @@ interface TokenCache {
 export class EbayBrowseApiProvider implements EbayProvider {
   readonly name = "EbayBrowseApiProvider";
   private tokenCache: TokenCache | null = null;
+  private readonly insights: EbayMarketplaceInsightsProvider;
 
   constructor(
     private readonly config: {
@@ -27,7 +23,9 @@ export class EbayBrowseApiProvider implements EbayProvider {
       marketplaceId?: string;
       baseUrl?: string;
     },
-  ) {}
+  ) {
+    this.insights = new EbayMarketplaceInsightsProvider(config);
+  }
 
   private get marketplaceId() {
     return this.config.marketplaceId ?? "EBAY_US";
@@ -83,9 +81,7 @@ export class EbayBrowseApiProvider implements EbayProvider {
       url: item.itemWebUrl ?? `https://www.ebay.com/itm/${item.itemId}`,
       imageUrl: item.image?.imageUrl,
       priceMinor: Math.round(Number(item.price?.value ?? 0) * 100),
-      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value
-        ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100)
-        : undefined,
+      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100) : undefined,
       currency: item.price?.currency ?? "USD",
       condition: item.condition,
       sellerUsername: item.seller?.username,
@@ -138,9 +134,7 @@ export class EbayBrowseApiProvider implements EbayProvider {
       url: item.itemWebUrl ?? `https://www.ebay.com/itm/${item.itemId}`,
       imageUrl: item.image?.imageUrl,
       priceMinor: Math.round(Number(item.price?.value ?? 0) * 100),
-      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value
-        ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100)
-        : undefined,
+      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100) : undefined,
       currency: item.price?.currency ?? "USD",
       condition: item.condition,
       sellerUsername: item.seller?.username,
@@ -158,9 +152,13 @@ export class EbayBrowseApiProvider implements EbayProvider {
   }
 
   async getMarketDemand(input: EbayDemandInput): Promise<EbayDemandResult> {
-    void input;
     const now = new Date().toISOString();
-    // Marketplace Insights is limited-release; Browse cannot supply sold history.
+    if (process.env.EBAY_INSIGHTS_ENABLED !== "false" && this.hasCredentials) {
+      const insightsDemand = await this.insights.getMarketDemand(input);
+      if (insightsDemand.available) return insightsDemand;
+    }
+
+    // Browse cannot supply sold history; Insights is Limited Release (often 403).
     return {
       available: false,
       source: "EbayBrowseApiProvider",
@@ -170,9 +168,7 @@ export class EbayBrowseApiProvider implements EbayProvider {
         confidence: 0,
         collectedAt: now,
         completeness: "minimal",
-        warnings: [
-          "Sold history requires Marketplace Insights (limited release) or manual/licensed source",
-        ],
+        warnings: ["Sold history requires Marketplace Insights access or manual validation on the candidate page", `insightsAccess=${this.insights.accessState}`],
       },
     };
   }
@@ -181,9 +177,7 @@ export class EbayBrowseApiProvider implements EbayProvider {
     if (this.tokenCache && this.tokenCache.expiresAt > Date.now() + 60_000) {
       return this.tokenCache.accessToken;
     }
-    const basic = Buffer.from(
-      `${this.config.clientId}:${this.config.clientSecret}`,
-    ).toString("base64");
+    const basic = Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString("base64");
     const res = await fetch(`${this.baseUrl}/identity/v1/oauth2/token`, {
       method: "POST",
       headers: {
@@ -279,7 +273,10 @@ export class EbayBrowseApiProvider implements EbayProvider {
         },
       },
     ];
-    const tokens = input.keyword.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+    const tokens = input.keyword
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 2);
     return fixtures
       .filter((f) => {
         const title = f.title.toLowerCase();
@@ -293,14 +290,7 @@ export class EbayBrowseApiProvider implements EbayProvider {
 export class EbayManualDemandProvider {
   readonly name = "EbayManualDemandProvider";
 
-  toDemandResult(observation: {
-    soldLast30Days: number;
-    avgCompletedSaleMinor?: number;
-    medianCompletedSaleMinor?: number;
-    totalHistoricalSold?: number;
-    evidenceUrl?: string;
-    verifiedBy?: string;
-  }): EbayDemandResult {
+  toDemandResult(observation: { soldLast30Days: number; avgCompletedSaleMinor?: number; medianCompletedSaleMinor?: number; totalHistoricalSold?: number; evidenceUrl?: string; verifiedBy?: string }): EbayDemandResult {
     const now = new Date().toISOString();
     return {
       available: true,

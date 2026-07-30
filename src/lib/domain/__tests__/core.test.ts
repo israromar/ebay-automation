@@ -76,7 +76,25 @@ describe("matching", () => {
   });
 
   it("builds distinct AE query variants from a marketplace title", () => {
-    expect(buildAliExpressSearchQueries("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB", "portable blender")).toEqual(["portable blender", "rechargeable portable blender personal mini", "mixer protein shakes juicer cup"]);
+    expect(buildAliExpressSearchQueries("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB", "portable blender")).toEqual(["rechargeable portable blender personal mini", "portable blender", "mixer protein shakes juicer cup"]);
+  });
+
+  it("preserves kit quantity in AE retrieval and matching", () => {
+    const ebayTitle = "XPRT Fitness 11-Piece Resistance Bands Set 150LB - Ultimate Home Gym Kit";
+    const exactAeTitle = "11pcs TPE Resistance Band Set Fitness Band Pull Rope Elastic Training Band With Door Anchor Handles Carry Bag Legs Ankle Straps";
+    const genericAeTitle = "5-Level Resistance Bands Set for Yoga Pilates Home Gym Exercise Fitness Sport Elastic Rubber Bands for Workout Gym Accessories";
+
+    expect(buildAliExpressSearchQueries(ebayTitle, "resistance bands")[0]).toBe("11pcs resistance bands set");
+    expect(buildAliExpressSearchQueries(ebayTitle)[0]).toBe("11pcs xprt fitness resistance bands set");
+    expect(scoreAliExpressSourceMatch({ title: ebayTitle, condition: "NEW", priceMinor: 2999 }, { title: exactAeTitle, condition: "NEW", priceMinor: 728 }, "11pcs resistance bands set")).toMatchObject({
+      hardReject: false,
+      confidence: 85,
+      reasons: expect.arrayContaining(["pack_quantity_match"]),
+    });
+    expect(scoreAliExpressSourceMatch({ title: ebayTitle, condition: "NEW", priceMinor: 2999 }, { title: genericAeTitle, condition: "NEW", priceMinor: 500 }, "11pcs resistance bands set")).toMatchObject({
+      hardReject: true,
+      reasons: expect.arrayContaining(["pack_quantity_missing"]),
+    });
   });
 
   it("matches equivalent cross-marketplace titles with different wording", () => {
@@ -115,11 +133,7 @@ describe("matching", () => {
   });
 
   it("rejects sewing tape as a match for sleep mouth tape", () => {
-    const match = scoreAliExpressSourceMatch(
-      { title: "Hostage Mouth Tape 90 Night Supply", condition: "NEW", priceMinor: 4000 },
-      { title: "Pants Edge Shorten Self Adhesive Pant Mouth Paste Iron on Hem Fabric Fusing Hemming Ironing Sewing Tape", condition: "NEW", priceMinor: 188 },
-      "mouth tape",
-    );
+    const match = scoreAliExpressSourceMatch({ title: "Hostage Mouth Tape 90 Night Supply", condition: "NEW", priceMinor: 4000 }, { title: "Pants Edge Shorten Self Adhesive Pant Mouth Paste Iron on Hem Fabric Fusing Hemming Ironing Sewing Tape", condition: "NEW", priceMinor: 188 }, "mouth tape");
 
     expect(match).toMatchObject({
       hardReject: true,

@@ -848,16 +848,15 @@ export class ScanOrchestrator {
     for (const query of queries) {
       const results = await this.deps.aliexpress.searchProducts({
         keyword: query,
-        limit: 150,
+        limit: 75,
       });
       for (const product of results) products.set(product.productId, product);
-      if (products.size >= 150) break;
     }
 
     return {
       primaryQuery: queries[0] ?? keyword,
       queries,
-      products: [...products.values()].slice(0, 150),
+      products: [...products.values()].slice(0, 300),
     };
   }
 
@@ -890,20 +889,32 @@ export class ScanOrchestrator {
       },
     });
 
+    const expectedPrice = observation.avgCompletedSaleMinor ?? observation.medianCompletedSaleMinor ?? candidate.ebayCurrentPriceMinor ?? 0;
+    const shipping = candidate.aliexpressShippingMinor ?? 0;
+    const profit = calculateProfit({
+      aliexpressItemPriceMinor: candidate.aliexpressPriceMinor ?? 0,
+      aliexpressShippingCostMinor: shipping,
+      additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+      expectedSellingPriceMinor: expectedPrice,
+      ebayFeeRate: this.rules.ebayFeeRate,
+      promotedListingRate: this.rules.promotedListingRate,
+      expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+      expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+      otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+      otherPercentageCost: this.rules.otherPercentageCost,
+    });
+
     const rejectionCodes: RejectionCode[] = [];
     let status: CandidateStatus = "EBAY_MATCHED";
 
     if (observation.soldLast30Days < this.rules.minimumRecentSales) {
       status = "DEMAND_NOT_VERIFIED";
       rejectionCodes.push("EBAY_RECENT_SALES_TOO_LOW");
+    } else if (profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
+      status = "UNPROFITABLE";
+      rejectionCodes.push("MARGIN_TOO_LOW");
     } else {
-      const margin = candidate.netMarginPercent ?? 0;
-      if (margin < this.rules.minimumNetMarginPercent) {
-        status = "UNPROFITABLE";
-        rejectionCodes.push("MARGIN_TOO_LOW");
-      } else {
-        status = "APPROVED";
-      }
+      status = "APPROVED";
     }
 
     const updated = await prisma.productCandidate.update({
@@ -914,8 +925,29 @@ export class ScanOrchestrator {
         soldLast30Days: observation.soldLast30Days,
         avgCompletedSaleMinor: observation.avgCompletedSaleMinor,
         medianCompletedSaleMinor: observation.medianCompletedSaleMinor,
+        estimatedProfitMinor: profit.estimatedProfitMinor,
+        netMarginPercent: profit.profitMarginPercent,
+        returnOnCostPercent: profit.returnOnCostPercent,
+        adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
         rejectionReasonsJson: JSON.stringify(rejectionCodes),
         lastVerifiedAt: new Date(),
+        profitCalculations: {
+          create: {
+            expectedSellingPriceMinor: expectedPrice,
+            grossRevenueMinor: profit.grossRevenueMinor,
+            adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
+            marketplaceFeesMinor: profit.marketplaceFeesMinor,
+            promotedListingFeeMinor: profit.promotedListingFeeMinor,
+            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+            totalEstimatedCostMinor: profit.totalEstimatedCostMinor,
+            estimatedProfitMinor: profit.estimatedProfitMinor,
+            profitMarginPercent: profit.profitMarginPercent,
+            returnOnCostPercent: profit.returnOnCostPercent,
+            assumptionsJson: JSON.stringify({ ...this.rules, demandSource: "manual" }),
+          },
+        },
         manualReviews: {
           create: {
             action: "DEMAND_VALIDATED",
