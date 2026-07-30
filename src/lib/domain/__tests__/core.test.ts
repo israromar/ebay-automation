@@ -232,6 +232,27 @@ describe("matching", () => {
       reasons: expect.arrayContaining(["product_context_mismatch"]),
     });
   });
+
+  it("boosts over-door hanging traction matches and prefers that query variant", () => {
+    const ebayTitle = "Neck Traction Stretcher Cervical Head Brace Pain Relief Device Home Over Door";
+    expect(buildAliExpressSearchQueries(ebayTitle, "neck stretcher")[0]).toBe("over door neck stretcher");
+
+    const hanging = scoreAliExpressSourceMatch(
+      { title: ebayTitle, condition: "NEW", priceMinor: 1899 },
+      {
+        title: "Cervical Traction Device Over Door Hanging Home Use Neck Stretcher Belt Medical Orthosis Pain Relief",
+        condition: "NEW",
+        priceMinor: 1066,
+      },
+      "over door neck stretcher",
+    );
+
+    expect(hanging).toMatchObject({
+      hardReject: false,
+      reasons: expect.arrayContaining(["form_factor_match"]),
+    });
+    expect(hanging.confidence).toBeGreaterThanOrEqual(70);
+  });
 });
 
 describe("scheduler", () => {

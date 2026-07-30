@@ -45,6 +45,14 @@ function sourcingPriceScore(ebayPriceMinor: number | undefined, sourcePriceMinor
   return Math.max(0, Math.min(discount, 1)) * 10;
 }
 
+function imageRetrievalBoost(product: AliExpressProduct): number {
+  return product.meta.warnings.includes("retrieved_by_image") ? 12 : 0;
+}
+
+function formFactorBoost(match: MatchResult): number {
+  return match.reasons.includes("form_factor_match") ? 10 : 0;
+}
+
 export function rankAliExpressSources(input: RankAliExpressSourcesInput): RankedAliExpressSource[] {
   const softMatchFloor = Math.min(35, input.rules.minimumMatchConfidence);
 
@@ -57,7 +65,11 @@ export function rankAliExpressSources(input: RankAliExpressSourcesInput): Ranked
       );
       const qualification = qualifyAliExpressProduct(product, input.rules);
       const rankScore =
-        match.confidence * 0.65 + supplierQualityScore(product) + sourcingPriceScore(input.ebay.priceMinor, product.priceMinor);
+        match.confidence * 0.65 +
+        supplierQualityScore(product) +
+        sourcingPriceScore(input.ebay.priceMinor, product.priceMinor) +
+        formFactorBoost(match) +
+        imageRetrievalBoost(product);
       return { product, match, qualification, rankScore };
     })
     .filter(({ match, qualification }) => !match.hardReject && match.confidence >= softMatchFloor && qualification.reasons.length === 0)
@@ -90,7 +102,9 @@ export function applyVisualScoresToRankedSources(
         combinedConfidence * 0.65 +
         supplierQualityScore(entry.product) +
         sourcingPriceScore(options?.ebayPriceMinor, entry.product.priceMinor) +
-        (visualAvailable ? (visualScore ?? 0) * 0.15 : 0);
+        formFactorBoost(entry.match) +
+        imageRetrievalBoost(entry.product) +
+        (visualAvailable ? (visualScore ?? 0) * 0.25 : 0);
 
       return {
         ...entry,
@@ -105,5 +119,11 @@ export function applyVisualScoresToRankedSources(
       if (!entry.visualAvailable || entry.visualScore == null) return options?.requireVisual !== true;
       return entry.visualScore >= visualFloor;
     })
-    .sort((a, b) => b.rankScore - a.rankScore);
+    .sort((a, b) => {
+      if ((b.visualScore ?? 0) !== (a.visualScore ?? 0) && a.visualAvailable && b.visualAvailable) {
+        const visualGap = (b.visualScore ?? 0) - (a.visualScore ?? 0);
+        if (Math.abs(visualGap) >= 8) return visualGap;
+      }
+      return b.rankScore - a.rankScore;
+    });
 }

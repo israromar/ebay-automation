@@ -193,11 +193,15 @@ export default function CandidateDetailPage() {
               <li>Price: {money(candidate.aliexpressPriceMinor)}</li>
               <li>Shipping: {money(candidate.aliexpressShippingMinor)}</li>
             </ul>
-            {!candidate.aliexpressUrl && aeAlternatives.length > 0 ? (
+            {aeAlternatives.length > 0 ? (
               <div className="space-y-2 border-t border-slate-200 pt-3">
-                <p className="font-medium text-slate-900">Relevant alternatives found</p>
+                <p className="font-medium text-slate-900">
+                  {candidate.aliexpressUrl ? "Other evaluated AliExpress options" : "Relevant alternatives found"}
+                </p>
                 <p className="text-xs text-slate-600">
-                  These were not attached because supplier data or economics failed the configured rules.
+                  {candidate.aliexpressUrl
+                    ? "These were evaluated during matching. Use them to verify the attached source is the closest product kit."
+                    : "These were not attached because supplier data or economics failed the configured rules."}
                 </p>
                 {aeAlternatives.map((alternative) => (
                   <a

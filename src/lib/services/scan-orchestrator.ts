@@ -758,7 +758,9 @@ export class ScanOrchestrator {
       .sort((a, b) => {
         if (a.product.productId === selectedAe?.productId) return -1;
         if (b.product.productId === selectedAe?.productId) return 1;
-        return b.titleRelevance - a.titleRelevance || b.match.confidence - a.match.confidence;
+        const aForm = a.match.reasons.includes("form_factor_match") ? 1 : 0;
+        const bForm = b.match.reasons.includes("form_factor_match") ? 1 : 0;
+        return bForm - aForm || b.titleRelevance - a.titleRelevance || b.match.confidence - a.match.confidence;
       })
       .slice(0, 5);
 

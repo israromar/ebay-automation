@@ -103,9 +103,10 @@ Concrete failures from production debugging. Prefer the checklist in `SKILL.md`;
 **Fix pattern:**
 
 - Hard-reject door/hanging traction vs lying/massage pillows as `product_context_mismatch`.
+- Prefer form-factor query variants (`over door neck stretcher`) and boost shared form-factor matches.
 - Support official image search with a ≤100KB JPEG and union image hits with keyword hits before ranking.
 - Keep image search disabled until AliExpress grants the app permission; never scrape the consumer image-search UI as a production substitute.
-- Persist whether an alternative came from keyword or image retrieval.
+- Persist whether an alternative came from keyword or image retrieval, and show alternatives even when a source is attached.
 
 ## Validation commands
 

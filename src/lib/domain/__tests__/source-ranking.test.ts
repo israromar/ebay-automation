@@ -58,4 +58,33 @@ describe("rankAliExpressSources", () => {
 
     expect(ranked[0]?.product.productId).toBe("cheaper");
   });
+
+  it("prefers over-door hanging traction over high-order pillows", () => {
+    const ranked = rankAliExpressSources({
+      ebay: {
+        title: "Neck Traction Stretcher Cervical Head Brace Pain Relief Device Home Over Door",
+        condition: "NEW",
+        priceMinor: 1899,
+      },
+      candidates: [
+        source(
+          "pillow",
+          "Neck Devices Neck Stretcher Orthopedic Traction Pillow Relief Neck Cervical Traction Pillow Portable Cervical Massage Pillow",
+          4.9,
+          563,
+        ),
+        source(
+          "hanging",
+          "Cervical Traction Device Over Door Hanging Home Use Neck Stretcher Belt Medical Orthosis Pain Relief Adjustable Portable Soft",
+          4.8,
+          1066,
+        ),
+      ],
+      searchKeyword: "over door neck stretcher",
+      rules: DEFAULT_RULES,
+    });
+
+    expect(ranked.map((entry) => entry.product.productId)).toEqual(["hanging"]);
+    expect(ranked[0]?.match.reasons).toContain("form_factor_match");
+  });
 });

@@ -53,8 +53,14 @@ export function buildAliExpressSearchQueries(title: string, seedKeyword?: string
     (packQuantity ?? 0) > 1 && quantityCore
       ? `${packQuantity}pcs ${quantityCore}${titleHasSet && !/\b(?:set|kit)\b/i.test(quantityCore) ? " set" : ""}`
       : "";
+  const formFactorQuery = /\bover\s+door\b/i.test(title)
+    ? `over door ${seed || descriptiveTokens.slice(0, 3).join(" ") || "neck stretcher"}`.trim()
+    : /\b(?:hanging|suspension)\b/i.test(title)
+      ? `hanging cervical traction ${seed || ""}`.trim()
+      : "";
   const queries = [
     quantityQuery,
+    formFactorQuery,
     descriptiveTokens.slice(0, 5).join(" "),
     buildAliExpressSearchQuery(title, seedKeyword),
     descriptiveTokens.slice(5, 10).join(" "),
@@ -135,16 +141,27 @@ const PRODUCT_CONTEXT_PATTERNS = [
   },
 ];
 
+/** Contexts that describe physical product form and should boost exact matches. */
+const FORM_FACTOR_CONTEXTS = new Set(["door_hanging_traction", "lying_neck_pillow"]);
+
 export function detectAccessory(title: string): boolean {
   const n = normalizeTitle(title);
   return ACCESSORY_PATTERNS.some((pattern) => pattern.test(n));
 }
 
+export function detectProductContexts(title: string): string[] {
+  return PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(title))).map(({ id }) => id);
+}
+
+export function sharedFormFactorContexts(sourceTitle: string, candidateTitle: string): string[] {
+  const source = detectProductContexts(sourceTitle).filter((id) => FORM_FACTOR_CONTEXTS.has(id));
+  const candidate = new Set(detectProductContexts(candidateTitle).filter((id) => FORM_FACTOR_CONTEXTS.has(id)));
+  return source.filter((id) => candidate.has(id));
+}
+
 function hasProductContextMismatch(sourceTitle: string, candidateTitle: string): boolean {
-  const sourceContexts = PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(sourceTitle))).map(({ id }) => id);
-  const candidateContexts = PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(candidateTitle))).map(
-    ({ id }) => id,
-  );
+  const sourceContexts = detectProductContexts(sourceTitle);
+  const candidateContexts = detectProductContexts(candidateTitle);
   return (
     sourceContexts.length > 0 && candidateContexts.length > 0 && !sourceContexts.some((context) => candidateContexts.includes(context))
   );
@@ -283,6 +300,13 @@ export function scoreAliExpressSourceMatch(ebay: MatchAttributes, aliexpress: Ma
     score += 10;
     reasons.push("source_price_below_ebay");
   }
+
+  const sharedForm = sharedFormFactorContexts(ebay.title, aliexpress.title);
+  if (sharedForm.length > 0) {
+    score += 18;
+    reasons.push("form_factor_match");
+  }
+
   if (coverage === 1) reasons.push("search_keyword_match");
   if (containment >= 0.5) reasons.push("strong_title_containment");
 
