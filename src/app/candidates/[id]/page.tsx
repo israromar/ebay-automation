@@ -45,7 +45,12 @@ function UrlActions({ label, url }: { label: string; url?: string | null }) {
         <button type="button" onClick={copy} className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
           {copied ? "Copied" : "Copy URL"}
         </button>
-        <a href={value} target="_blank" rel="noopener noreferrer" className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+        >
           Open
         </a>
       </div>
@@ -56,6 +61,30 @@ function UrlActions({ label, url }: { label: string; url?: string | null }) {
 function money(minor: unknown) {
   if (typeof minor !== "number") return "—";
   return `$${(minor / 100).toFixed(2)}`;
+}
+
+function readAliExpressAlternative(source: Record<string, unknown>) {
+  try {
+    const raw = JSON.parse(String(source.rawJson ?? "{}")) as {
+      product?: { title?: string; priceMinor?: number; rating?: number; orderCount?: number };
+      evaluation?: {
+        match?: { confidence?: number; reasons?: string[] };
+        qualification?: { reasons?: string[]; missingFields?: string[] };
+      };
+    };
+    return {
+      title: raw.product?.title ?? "AliExpress alternative",
+      priceMinor: raw.product?.priceMinor,
+      rating: raw.product?.rating,
+      orderCount: raw.product?.orderCount,
+      confidence: raw.evaluation?.match?.confidence,
+      reasons: [...(raw.evaluation?.match?.reasons ?? []), ...(raw.evaluation?.qualification?.reasons ?? [])],
+      missingFields: raw.evaluation?.qualification?.missingFields ?? [],
+      url: String(source.url ?? ""),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export default function CandidateDetailPage() {
@@ -130,6 +159,16 @@ export default function CandidateDetailPage() {
 
   const profit = (candidate.profitCalculations as Array<Record<string, unknown>>)?.[0];
   const needsDemand = candidate.demandVerified !== true || String(candidate.status) === "NEEDS_MANUAL_VALIDATION";
+  const hasValidatedAe = Boolean(
+    candidate.aliexpressProductId &&
+    candidate.aliexpressUrl &&
+    typeof candidate.aliexpressPriceMinor === "number" &&
+    typeof candidate.matchConfidence === "number",
+  );
+  const aeAlternatives = ((candidate.sourceProducts as Array<Record<string, unknown>>) ?? [])
+    .filter((source) => source.marketplace === "aliexpress_alternative")
+    .map(readAliExpressAlternative)
+    .filter((source): source is NonNullable<typeof source> => source != null);
 
   return (
     <div className="space-y-6">
@@ -152,6 +191,34 @@ export default function CandidateDetailPage() {
               <li>Price: {money(candidate.aliexpressPriceMinor)}</li>
               <li>Shipping: {money(candidate.aliexpressShippingMinor)}</li>
             </ul>
+            {!candidate.aliexpressUrl && aeAlternatives.length > 0 ? (
+              <div className="space-y-2 border-t border-slate-200 pt-3">
+                <p className="font-medium text-slate-900">Relevant alternatives found</p>
+                <p className="text-xs text-slate-600">
+                  These were not attached because supplier data or economics failed the configured rules.
+                </p>
+                {aeAlternatives.map((alternative) => (
+                  <a
+                    key={alternative.url}
+                    href={alternative.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-md border border-slate-200 p-2 hover:bg-slate-50"
+                  >
+                    <span className="line-clamp-2 font-medium text-teal-800">{alternative.title}</span>
+                    <span className="mt-1 block text-xs text-slate-600">
+                      {money(alternative.priceMinor)} · match {alternative.confidence ?? "—"} · rating {alternative.rating ?? "—"} · orders{" "}
+                      {alternative.orderCount ?? "—"}
+                    </span>
+                    {alternative.reasons.length > 0 || alternative.missingFields.length > 0 ? (
+                      <span className="mt-1 block text-xs text-amber-700">
+                        {[...alternative.reasons, ...alternative.missingFields.map((field) => `Missing ${field}`)].join(" · ")}
+                      </span>
+                    ) : null}
+                  </a>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-4 text-sm">
@@ -172,7 +239,11 @@ export default function CandidateDetailPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
         <h3 className="font-medium">Profit breakdown</h3>
-        {profit ? <pre className="mt-2 overflow-x-auto rounded bg-slate-50 p-3 text-xs">{JSON.stringify(profit, null, 2)}</pre> : <p className="mt-2 text-slate-500">No calculation stored.</p>}
+        {profit ? (
+          <pre className="mt-2 overflow-x-auto rounded bg-slate-50 p-3 text-xs">{JSON.stringify(profit, null, 2)}</pre>
+        ) : (
+          <p className="mt-2 text-slate-500">No calculation stored.</p>
+        )}
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
@@ -182,19 +253,42 @@ export default function CandidateDetailPage() {
 
       <section className={`rounded-lg border p-4 text-sm ${needsDemand ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
         <h3 className="font-medium">Sold history / demand validation</h3>
-        <p className="mt-1 text-slate-700">Browse API cannot supply sold counts. Open eBay sold history while logged in, then enter the numbers here. Approval requires verified demand.</p>
+        {hasValidatedAe ? (
+          <p className="mt-1 text-slate-700">
+            Browse API cannot supply sold counts. Open eBay sold history while logged in, then enter the numbers here. Approval requires
+            verified demand.
+          </p>
+        ) : (
+          <p className="mt-1 font-medium text-amber-800">
+            Demand can be recorded only after a qualified AliExpress source is attached. This candidate cannot be approved yet.
+          </p>
+        )}
 
         <div className="mt-3 flex flex-wrap gap-2">
           {soldHistoryLinks.purchaseHistory ? (
-            <a href={soldHistoryLinks.purchaseHistory} target="_blank" rel="noopener noreferrer" className="rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">
+            <a
+              href={soldHistoryLinks.purchaseHistory}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+            >
               Open listing sold history
             </a>
           ) : null}
-          <a href={soldHistoryLinks.soldSearch} target="_blank" rel="noopener noreferrer" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50">
+          <a
+            href={soldHistoryLinks.soldSearch}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50"
+          >
             Open sold+completed search
           </a>
           {soldHistoryLinks.purchaseHistory ? (
-            <button type="button" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs hover:bg-slate-50" onClick={() => setEvidence(soldHistoryLinks.purchaseHistory ?? "")}>
+            <button
+              type="button"
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs hover:bg-slate-50"
+              onClick={() => setEvidence(soldHistoryLinks.purchaseHistory ?? "")}
+            >
               Use history URL as evidence
             </button>
           ) : null}
@@ -209,24 +303,51 @@ export default function CandidateDetailPage() {
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1">
             <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Sold last 30 days</span>
-            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={sold} onChange={(e) => setSold(e.target.value)} inputMode="numeric" />
+            <input
+              className="w-full rounded-md border border-slate-300 px-3 py-2"
+              value={sold}
+              onChange={(e) => setSold(e.target.value)}
+              inputMode="numeric"
+            />
           </label>
           <label className="space-y-1">
             <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Avg sold price ($)</span>
-            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={avgSale} onChange={(e) => setAvgSale(e.target.value)} placeholder="e.g. 24.99" inputMode="decimal" />
+            <input
+              className="w-full rounded-md border border-slate-300 px-3 py-2"
+              value={avgSale}
+              onChange={(e) => setAvgSale(e.target.value)}
+              placeholder="e.g. 24.99"
+              inputMode="decimal"
+            />
           </label>
           <label className="space-y-1">
             <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Median sold price ($)</span>
-            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={medianSale} onChange={(e) => setMedianSale(e.target.value)} placeholder="optional" inputMode="decimal" />
+            <input
+              className="w-full rounded-md border border-slate-300 px-3 py-2"
+              value={medianSale}
+              onChange={(e) => setMedianSale(e.target.value)}
+              placeholder="optional"
+              inputMode="decimal"
+            />
           </label>
           <label className="space-y-1 sm:col-span-2 lg:col-span-1">
             <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Evidence URL</span>
-            <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="Sold history URL" />
+            <input
+              className="w-full rounded-md border border-slate-300 px-3 py-2"
+              value={evidence}
+              onChange={(e) => setEvidence(e.target.value)}
+              placeholder="Sold history URL"
+            />
           </label>
         </div>
 
         <div className="mt-3">
-          <button type="button" disabled={busy} onClick={submitDemand} className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white disabled:opacity-60">
+          <button
+            type="button"
+            disabled={busy || !hasValidatedAe}
+            onClick={submitDemand}
+            className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
             {busy ? "Applying…" : "Apply demand"}
           </button>
         </div>

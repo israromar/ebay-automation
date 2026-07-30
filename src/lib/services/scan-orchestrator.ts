@@ -1,11 +1,25 @@
 import { prisma } from "@/lib/db";
 import { calculateProfit, formatMinor } from "@/lib/domain/profit";
-import { buildAliExpressSearchQueries, candidateFingerprint, scoreProductMatch } from "@/lib/domain/matching";
+import {
+  buildAliExpressSearchQueries,
+  candidateFingerprint,
+  jaccardSimilarity,
+  scoreAliExpressSourceMatch,
+  scoreProductMatch,
+  tokenSet,
+} from "@/lib/domain/matching";
 import { qualifyAliExpressProduct } from "@/lib/domain/qualification";
 import { applyVisualScoresToRankedSources, hasSourcingPriceAdvantage, rankAliExpressSources } from "@/lib/domain/source-ranking";
 import { deriveTrendIdeaMatchStatus } from "@/lib/domain/trend-match-status";
 import { DEFAULT_VISUAL_MATCH_FLOOR } from "@/lib/domain/visual-matching";
-import { DEFAULT_RULES, type AliExpressProduct, type CandidateStatus, type EbayListing, type QualificationRules, type RejectionCode } from "@/lib/domain/types";
+import {
+  DEFAULT_RULES,
+  type AliExpressProduct,
+  type CandidateStatus,
+  type EbayListing,
+  type QualificationRules,
+  type RejectionCode,
+} from "@/lib/domain/types";
 import type { ExportCandidateRow } from "@/lib/export/types";
 import { logInfo, logWarn } from "@/lib/logger";
 import type { AliExpressProvider, EbayProvider, SpreadsheetExporter } from "@/lib/providers/types";
@@ -210,7 +224,9 @@ export class ScanOrchestrator {
             warnings: ["Seeded from trend idea; Browse getItem skipped"],
           },
         };
-        const candidate = await this.processEbaySeededProduct(scan.id, idea.searchKeyword ?? idea.title.slice(0, 80), listing, { activeListingCount: idea.activeListingCount });
+        const candidate = await this.processEbaySeededProduct(scan.id, idea.searchKeyword ?? idea.title.slice(0, 80), listing, {
+          activeListingCount: idea.activeListingCount,
+        });
 
         const ideaStatus = deriveTrendIdeaMatchStatus({
           aliexpressProductId: candidate.aliexpressProductId,
@@ -402,7 +418,13 @@ export class ScanOrchestrator {
       otherPercentageCost: this.rules.otherPercentageCost,
     });
 
-    if (demandVerified && status !== "DEMAND_NOT_VERIFIED" && status !== "ALIEXPRESS_REJECTED" && status !== "EBAY_MATCH_REQUIRED" && status !== "NEEDS_MANUAL_VALIDATION") {
+    if (
+      demandVerified &&
+      status !== "DEMAND_NOT_VERIFIED" &&
+      status !== "ALIEXPRESS_REJECTED" &&
+      status !== "EBAY_MATCH_REQUIRED" &&
+      status !== "NEEDS_MANUAL_VALIDATION"
+    ) {
       if (profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
         status = "UNPROFITABLE";
         rejectionCodes.push("MARGIN_TOO_LOW");
@@ -554,7 +576,9 @@ export class ScanOrchestrator {
       rules: this.rules,
     });
 
-    const priceEligibleSources = rankedText.filter(({ product }) => hasSourcingPriceAdvantage(ebay.priceMinor, product.priceMinor, product.shippingMinor ?? 0));
+    const priceEligibleSources = rankedText.filter(({ product }) =>
+      hasSourcingPriceAdvantage(ebay.priceMinor, product.priceMinor, product.shippingMinor ?? 0),
+    );
     const profitableSources = priceEligibleSources.filter(({ product }) => {
       const profit = calculateProfit({
         aliexpressItemPriceMinor: product.priceMinor,
@@ -712,6 +736,29 @@ export class ScanOrchestrator {
 
     const matchConfidence = selectedAe ? topConfidence : undefined;
     const activeListingCount = opts?.activeListingCount ?? 1;
+    const alternativeSources = aeResults
+      .map((product) => {
+        const match = scoreAliExpressSourceMatch(
+          {
+            title: ebay.title,
+            packQuantity: null,
+            condition: ebay.condition ?? "NEW",
+            categoryId: ebay.categoryId,
+            priceMinor: ebay.priceMinor,
+          },
+          { title: product.title, condition: "NEW", priceMinor: product.priceMinor },
+          aeQuery,
+        );
+        const qualification = qualifyAliExpressProduct(product, this.rules);
+        const titleRelevance = Math.round(jaccardSimilarity(tokenSet(ebay.title), tokenSet(product.title)) * 100);
+        return { product, match, qualification, titleRelevance };
+      })
+      .sort((a, b) => {
+        if (a.product.productId === selectedAe?.productId) return -1;
+        if (b.product.productId === selectedAe?.productId) return 1;
+        return b.titleRelevance - a.titleRelevance || b.match.confidence - a.match.confidence;
+      })
+      .slice(0, 5);
 
     const candidate = await prisma.productCandidate.create({
       data: {
@@ -760,15 +807,38 @@ export class ScanOrchestrator {
           },
         },
         sourceProducts: {
-          create: {
-            marketplace: "ebay",
-            externalId: ebay.itemId,
-            url: ebay.url,
-            rawJson: JSON.stringify(ebay),
-            confidence: ebay.meta.confidence,
-            completeness: ebay.meta.completeness,
-            warningsJson: JSON.stringify(ebay.meta.warnings),
-          },
+          create: [
+            {
+              marketplace: "ebay",
+              externalId: ebay.itemId,
+              url: ebay.url,
+              rawJson: JSON.stringify(ebay),
+              confidence: ebay.meta.confidence,
+              completeness: ebay.meta.completeness,
+              warningsJson: JSON.stringify(ebay.meta.warnings),
+            },
+            ...alternativeSources.map(({ product, match, qualification, titleRelevance }) => ({
+              marketplace: "aliexpress_alternative",
+              externalId: product.productId,
+              url: product.url,
+              rawJson: JSON.stringify({
+                product,
+                evaluation: {
+                  match,
+                  qualification,
+                  titleRelevance,
+                  selected: product.productId === selectedAe?.productId,
+                },
+              }),
+              confidence: match.confidence / 100,
+              completeness: product.meta.completeness,
+              warningsJson: JSON.stringify([
+                ...match.reasons,
+                ...qualification.reasons,
+                ...qualification.missingFields.map((field) => `MISSING_${field.toUpperCase()}`),
+              ]),
+            })),
+          ],
         },
         ...(selectedAe
           ? {
@@ -876,6 +946,15 @@ export class ScanOrchestrator {
       include: { profitCalculations: { orderBy: { createdAt: "desc" }, take: 1 } },
     });
 
+    if (
+      !candidate.aliexpressProductId ||
+      !candidate.aliexpressUrl ||
+      candidate.aliexpressPriceMinor == null ||
+      candidate.matchConfidence == null
+    ) {
+      throw new Error("Cannot approve demand: candidate has no validated AliExpress source");
+    }
+
     await prisma.ebaySaleObservation.create({
       data: {
         candidateId,
@@ -976,7 +1055,12 @@ export class ScanOrchestrator {
 
   async exportApproved(exporter: SpreadsheetExporter) {
     const approved = await prisma.productCandidate.findMany({
-      where: { status: { in: ["APPROVED", "EXPORT_PENDING"] } },
+      where: {
+        status: { in: ["APPROVED", "EXPORT_PENDING"] },
+        aliexpressProductId: { not: null },
+        aliexpressUrl: { not: null },
+        aliexpressPriceMinor: { not: null },
+      },
     });
     const rows: ExportCandidateRow[] = approved.map((c) => ({
       timestamp: new Date().toISOString(),

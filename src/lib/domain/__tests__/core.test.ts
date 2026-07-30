@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { calculateProfit } from "@/lib/domain/profit";
 import { qualifyAliExpressProduct } from "@/lib/domain/qualification";
-import { buildAliExpressSearchQueries, buildAliExpressSearchQuery, candidateFingerprint, normalizeTitle, scoreAliExpressSourceMatch, scoreProductMatch } from "@/lib/domain/matching";
+import {
+  buildAliExpressSearchQueries,
+  buildAliExpressSearchQuery,
+  candidateFingerprint,
+  extractGridQuantity,
+  normalizeTitle,
+  scoreAliExpressSourceMatch,
+  scoreProductMatch,
+} from "@/lib/domain/matching";
 import { DEFAULT_RULES } from "@/lib/domain/types";
 import { nextCronRun } from "@/lib/jobs/queue";
 
@@ -52,13 +60,19 @@ describe("qualification", () => {
 
 describe("matching", () => {
   it("hard-rejects pack and condition mismatches", () => {
-    const m = scoreProductMatch({ title: "Blender 1 pc", condition: "NEW", packQuantity: 1 }, { title: "Blender 2 pack", condition: "USED", packQuantity: 2 });
+    const m = scoreProductMatch(
+      { title: "Blender 1 pc", condition: "NEW", packQuantity: 1 },
+      { title: "Blender 2 pack", condition: "USED", packQuantity: 2 },
+    );
     expect(m.hardReject).toBe(true);
     expect(m.confidence).toBe(0);
   });
 
   it("scores similar titles highly", () => {
-    const m = scoreProductMatch({ title: "Portable Rechargeable Blender USB Mini", condition: "NEW" }, { title: "Portable Rechargeable Blender USB Mini Smoothie", condition: "NEW" });
+    const m = scoreProductMatch(
+      { title: "Portable Rechargeable Blender USB Mini", condition: "NEW" },
+      { title: "Portable Rechargeable Blender USB Mini Smoothie", condition: "NEW" },
+    );
     expect(m.hardReject).toBe(false);
     expect(m.confidence).toBeGreaterThanOrEqual(40);
   });
@@ -71,29 +85,63 @@ describe("matching", () => {
   });
 
   it("prefers short seed keyword for AE search", () => {
-    expect(buildAliExpressSearchQuery("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB", "portable blender")).toBe("portable blender");
-    expect(buildAliExpressSearchQuery("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB")).toMatch(/portable|blender/i);
+    expect(
+      buildAliExpressSearchQuery("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB", "portable blender"),
+    ).toBe("portable blender");
+    expect(buildAliExpressSearchQuery("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB")).toMatch(
+      /portable|blender/i,
+    );
   });
 
   it("builds distinct AE query variants from a marketplace title", () => {
-    expect(buildAliExpressSearchQueries("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB", "portable blender")).toEqual(["rechargeable portable blender personal mini", "portable blender", "mixer protein shakes juicer cup"]);
+    expect(
+      buildAliExpressSearchQueries("Rechargeable Portable Blender Personal Mini Mixer Protein Shakes Juicer Cup USB", "portable blender"),
+    ).toEqual(["rechargeable portable blender personal mini", "portable blender", "mixer protein shakes juicer cup"]);
   });
 
   it("preserves kit quantity in AE retrieval and matching", () => {
     const ebayTitle = "XPRT Fitness 11-Piece Resistance Bands Set 150LB - Ultimate Home Gym Kit";
-    const exactAeTitle = "11pcs TPE Resistance Band Set Fitness Band Pull Rope Elastic Training Band With Door Anchor Handles Carry Bag Legs Ankle Straps";
-    const genericAeTitle = "5-Level Resistance Bands Set for Yoga Pilates Home Gym Exercise Fitness Sport Elastic Rubber Bands for Workout Gym Accessories";
+    const exactAeTitle =
+      "11pcs TPE Resistance Band Set Fitness Band Pull Rope Elastic Training Band With Door Anchor Handles Carry Bag Legs Ankle Straps";
+    const genericAeTitle =
+      "5-Level Resistance Bands Set for Yoga Pilates Home Gym Exercise Fitness Sport Elastic Rubber Bands for Workout Gym Accessories";
 
     expect(buildAliExpressSearchQueries(ebayTitle, "resistance bands")[0]).toBe("11pcs resistance bands set");
     expect(buildAliExpressSearchQueries(ebayTitle)[0]).toBe("11pcs xprt fitness resistance bands set");
-    expect(scoreAliExpressSourceMatch({ title: ebayTitle, condition: "NEW", priceMinor: 2999 }, { title: exactAeTitle, condition: "NEW", priceMinor: 728 }, "11pcs resistance bands set")).toMatchObject({
+    expect(
+      scoreAliExpressSourceMatch(
+        { title: ebayTitle, condition: "NEW", priceMinor: 2999 },
+        { title: exactAeTitle, condition: "NEW", priceMinor: 728 },
+        "11pcs resistance bands set",
+      ),
+    ).toMatchObject({
       hardReject: false,
       confidence: 85,
       reasons: expect.arrayContaining(["pack_quantity_match"]),
     });
-    expect(scoreAliExpressSourceMatch({ title: ebayTitle, condition: "NEW", priceMinor: 2999 }, { title: genericAeTitle, condition: "NEW", priceMinor: 500 }, "11pcs resistance bands set")).toMatchObject({
+    expect(
+      scoreAliExpressSourceMatch(
+        { title: ebayTitle, condition: "NEW", priceMinor: 2999 },
+        { title: genericAeTitle, condition: "NEW", priceMinor: 500 },
+        "11pcs resistance bands set",
+      ),
+    ).toMatchObject({
       hardReject: true,
       reasons: expect.arrayContaining(["pack_quantity_missing"]),
+    });
+  });
+
+  it("rejects a different tray grid count", () => {
+    const ebayTitle = "Ice Cube Tray, 2 Pack Silicone Ice Tray, 37 Ice Cube Molds with Lids";
+    const wrongGrid = "2PCS Silicone Ice Cube Mold 148 Cube Large-capacity Ice Trays with Lids";
+
+    expect(extractGridQuantity(ebayTitle)).toBe(37);
+    expect(extractGridQuantity(wrongGrid)).toBe(148);
+    expect(
+      scoreAliExpressSourceMatch({ title: ebayTitle, priceMinor: 899 }, { title: wrongGrid, priceMinor: 310 }, "2pcs ice cube tray"),
+    ).toMatchObject({
+      hardReject: true,
+      reasons: expect.arrayContaining(["feature_quantity_mismatch"]),
     });
   });
 
@@ -117,13 +165,25 @@ describe("matching", () => {
   });
 
   it("does not promote a blender accessory as the main product", () => {
-    const match = scoreAliExpressSourceMatch({ title: "Rechargeable Portable Blender Personal Mini Mixer", condition: "NEW" }, { title: "Portable Plastic Blender Holder Stand Storage Box", condition: "NEW" }, "portable blender");
+    const match = scoreAliExpressSourceMatch(
+      { title: "Rechargeable Portable Blender Personal Mini Mixer", condition: "NEW" },
+      { title: "Portable Plastic Blender Holder Stand Storage Box", condition: "NEW" },
+      "portable blender",
+    );
 
     expect(match.hardReject).toBe(true);
   });
 
   it("rejects an earbuds case cover as a match for complete earbuds", () => {
-    const match = scoreAliExpressSourceMatch({ title: "Soundcore P30i Wireless Earbuds 2-in-1 Case Phone Stand Smart Noise Cancelling", condition: "NEW" }, { title: "Potdemiel Disney Earphone Case Cover for Anker Soundcore R50i NC / P30i Silicone Wireless Earbuds Protective Shell With Hook", condition: "NEW" }, "earbuds");
+    const match = scoreAliExpressSourceMatch(
+      { title: "Soundcore P30i Wireless Earbuds 2-in-1 Case Phone Stand Smart Noise Cancelling", condition: "NEW" },
+      {
+        title:
+          "Potdemiel Disney Earphone Case Cover for Anker Soundcore R50i NC / P30i Silicone Wireless Earbuds Protective Shell With Hook",
+        condition: "NEW",
+      },
+      "earbuds",
+    );
 
     expect(match).toMatchObject({
       hardReject: true,
@@ -133,7 +193,15 @@ describe("matching", () => {
   });
 
   it("rejects sewing tape as a match for sleep mouth tape", () => {
-    const match = scoreAliExpressSourceMatch({ title: "Hostage Mouth Tape 90 Night Supply", condition: "NEW", priceMinor: 4000 }, { title: "Pants Edge Shorten Self Adhesive Pant Mouth Paste Iron on Hem Fabric Fusing Hemming Ironing Sewing Tape", condition: "NEW", priceMinor: 188 }, "mouth tape");
+    const match = scoreAliExpressSourceMatch(
+      { title: "Hostage Mouth Tape 90 Night Supply", condition: "NEW", priceMinor: 4000 },
+      {
+        title: "Pants Edge Shorten Self Adhesive Pant Mouth Paste Iron on Hem Fabric Fusing Hemming Ironing Sewing Tape",
+        condition: "NEW",
+        priceMinor: 188,
+      },
+      "mouth tape",
+    );
 
     expect(match).toMatchObject({
       hardReject: true,

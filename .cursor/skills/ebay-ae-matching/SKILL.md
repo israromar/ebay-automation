@@ -19,13 +19,15 @@ Find AE sources that are the **same product kit**, **cheaper landed cost than eB
 
 When the user says a match is wrong, classify first:
 
-| Failure           | Symptom                                                | Where to look                                                                  |
-| ----------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| Retrieval miss    | Correct AE exists on site but not chosen / not in pool | `buildAliExpressSearchQueries`, `searchAliExpressSources`, provider sort/limit |
-| Pack/kit miss     | `11-Piece` vs `5-Level` / accessory                    | `extractPackQuantity`, `scoreAliExpressSourceMatch`                            |
-| Price inversion   | AE ≥ eBay or large negative profit still attached      | `hasSourcingPriceAdvantage`, profit gate in orchestrator                       |
-| Visual false gate | Everything `Needs review`, `VISUAL_MATCH_UNAVAILABLE`  | Do not hard-require visual unless scores actually available                    |
-| Semantic miss     | Mouth tape ↔ sewing tape, earbuds ↔ case               | context / accessory hard-rejects                                               |
+| Failure            | Symptom                                                | Where to look                                                                  |
+| ------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Retrieval miss     | Correct AE exists on site but not chosen / not in pool | `buildAliExpressSearchQueries`, `searchAliExpressSources`, provider sort/limit |
+| Pack/kit miss      | `11-Piece` vs `5-Level` / accessory                    | `extractPackQuantity`, `scoreAliExpressSourceMatch`                            |
+| Price inversion    | AE ≥ eBay or large negative profit still attached      | `hasSourcingPriceAdvantage`, profit gate in orchestrator                       |
+| Visual false gate  | Everything `Needs review`, `VISUAL_MATCH_UNAVAILABLE`  | Do not hard-require visual unless scores actually available                    |
+| Semantic miss      | Mouth tape ↔ sewing tape, earbuds ↔ case               | context / accessory hard-rejects                                               |
+| Qualification miss | AE results exist but candidate panel is blank          | Persist evaluated alternatives and expose rejection reasons                    |
+| Invalid approval   | `APPROVED` while AE fields are empty                   | Demand/approval/export must require a validated AE source                      |
 
 **Live-verify** with the official AE provider + the reported titles before declaring fixed.
 
@@ -40,6 +42,10 @@ When the user says a match is wrong, classify first:
 7. **Visual is evidence, not a kill-switch for runtime failure.** `requireVisual` only when at least one comparison returned `available: true`.
 8. **Statuses must be truthful.** Blocking reasons (`SOURCE_PRICE_NOT_BELOW_EBAY`, `MARGIN_TOO_LOW`, pack/visual/confidence failures) must not surface as successful `AE_MATCHED`.
 9. **Every user-reported miss becomes a regression test** with the real title pair (and query assertion when retrieval was the bug).
+10. **No AE source means no approval.** Demand entry must not approve unless AE product ID, URL, price, and match confidence are present. Never default missing source cost to zero.
+11. **Exports repeat the same validity gate.** `APPROVED` in storage is not sufficient; export must independently require AE ID, URL, and price.
+12. **Do not hide retrieval evidence.** Persist and display top evaluated AE alternatives with match, supplier, attribute, and profitability rejection reasons.
+13. **Validate critical numeric attributes.** Pack size, grid/cavity count, capacity, model, and similar explicit quantities override generic title overlap (for example 37-grid ≠ 148-grid).
 
 ## Change checklist
 
@@ -53,6 +59,10 @@ Matching change:
 - [ ] Wrong candidate hard-rejected or outranked with reason
 - [ ] Correct candidate enters pool and ranks competitively
 - [ ] Price + margin gates applied before attach
+- [ ] Approval + export require AE ID, URL, price, and confidence
+- [ ] Missing AE values are never converted to zero-cost economics
+- [ ] Retrieved-but-rejected AE alternatives remain inspectable with reasons
+- [ ] Critical numeric attributes match (pack/grid/capacity/model)
 - [ ] Visual required only when available
 - [ ] Trend/candidate status reflects blocking reasons
 - [ ] Regression test added for the reported titles
@@ -67,6 +77,7 @@ Matching change:
 - Idea status: `src/lib/domain/trend-match-status.ts`
 - Visual: `src/lib/domain/visual-matching.ts`, `src/lib/providers/dinov2-visual-match.ts`
 - AE API: `src/lib/providers/aliexpress-official.ts`
+- Product validity invariants: `docs/research/matching-validity.md`
 
 ## Judgement traps (do not repeat)
 
@@ -76,6 +87,9 @@ Matching change:
 - Stripping digits/`pcs` from every search token and never re-injecting quantity
 - Making visual mandatory while ORT/WASM is broken in Next → zero AE matches
 - Claiming success from unit tests alone when the bug is affiliate retrieval/sort
+- Assuming blank AE fields mean retrieval returned zero products
+- Letting manual demand validation bypass source matching and supplier qualification
+- Trusting a stored `APPROVED` status without rechecking export prerequisites
 
 ## Incident detail
 

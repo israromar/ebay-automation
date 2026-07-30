@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import {
-  AliExpressManualImportProvider,
-  sampleAliExpressCatalog,
-} from "@/lib/providers/aliexpress-manual";
+import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
 import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
 import { z } from "zod";
@@ -17,10 +14,7 @@ const schema = z.object({
   notes: z.string().optional(),
 });
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const candidate = await prisma.productCandidate.findUnique({
     where: { id },
@@ -40,10 +34,7 @@ export async function GET(
   return NextResponse.json({ candidate });
 }
 
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const json = await req.json();
   const parsed = schema.safeParse(json);
@@ -57,6 +48,12 @@ export async function POST(
       clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",
     }),
   });
-  const updated = await orchestrator.applyManualDemand(id, parsed.data);
-  return NextResponse.json({ candidate: updated });
+  try {
+    const updated = await orchestrator.applyManualDemand(id, parsed.data);
+    return NextResponse.json({ candidate: updated });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to apply demand";
+    const status = message.includes("no validated AliExpress source") ? 409 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
 }

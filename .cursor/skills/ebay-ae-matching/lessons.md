@@ -71,6 +71,24 @@ Concrete failures from production debugging. Prefer the checklist in `SKILL.md`;
 - `deriveTrendIdeaMatchStatus` with an explicit blocking-reason set.
 - Include price, margin, pack/visual/confidence, and no-source codes.
 
+## 6. eBay-only candidate approved after demand entry
+
+**Report:** Candidate showed `APPROVED` and verified demand while every AE field was blank.
+
+**Causes:**
+
+- Manual demand recalculated profit with missing AE price defaulted to zero.
+- Approval/export did not require an attached, validated AE source.
+- Retrieved-but-rejected AE products were discarded, making the UI look like retrieval failed.
+
+**Fix pattern:**
+
+- Demand validation must return 409 unless AE ID, URL, price, and match confidence exist.
+- Approved export queries must require AE ID, URL, and price.
+- Persist top evaluated AE alternatives with match/qualification rejection reasons.
+- Distinguish retrieval success from qualification failure in the UI.
+- Validate critical product attributes (for example 37-grid vs 148-grid), not only generic title overlap.
+
 ## Validation commands
 
 ```bash

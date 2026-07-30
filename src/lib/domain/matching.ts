@@ -7,7 +7,25 @@ export function normalizeTitle(title: string): string {
     .trim();
 }
 
-const SEARCH_STOP_WORDS = new Set(["with", "for", "and", "the", "new", "hot", "sale", "free", "shipping", "pcs", "pack", "lot", "usb", "ml", "oz", "ft", "brand"]);
+const SEARCH_STOP_WORDS = new Set([
+  "with",
+  "for",
+  "and",
+  "the",
+  "new",
+  "hot",
+  "sale",
+  "free",
+  "shipping",
+  "pcs",
+  "pack",
+  "lot",
+  "usb",
+  "ml",
+  "oz",
+  "ft",
+  "brand",
+]);
 
 function searchTokens(title: string): string[] {
   return normalizeTitle(title)
@@ -31,8 +49,16 @@ export function buildAliExpressSearchQueries(title: string, seedKeyword?: string
   const titleHasSet = /\b(?:set|kit)\b/i.test(title);
   const descriptiveTokens = tokens.filter((token) => token !== "piece");
   const quantityCore = seed || descriptiveTokens.slice(0, 4).join(" ");
-  const quantityQuery = (packQuantity ?? 0) > 1 && quantityCore ? `${packQuantity}pcs ${quantityCore}${titleHasSet && !/\b(?:set|kit)\b/i.test(quantityCore) ? " set" : ""}` : "";
-  const queries = [quantityQuery, descriptiveTokens.slice(0, 5).join(" "), buildAliExpressSearchQuery(title, seedKeyword), descriptiveTokens.slice(5, 10).join(" ")];
+  const quantityQuery =
+    (packQuantity ?? 0) > 1 && quantityCore
+      ? `${packQuantity}pcs ${quantityCore}${titleHasSet && !/\b(?:set|kit)\b/i.test(quantityCore) ? " set" : ""}`
+      : "";
+  const queries = [
+    quantityQuery,
+    descriptiveTokens.slice(0, 5).join(" "),
+    buildAliExpressSearchQuery(title, seedKeyword),
+    descriptiveTokens.slice(5, 10).join(" "),
+  ];
   return [...new Set(queries.filter((query) => query.length >= 3))];
 }
 
@@ -42,6 +68,12 @@ export function extractPackQuantity(title: string): number | null {
   if (m) return Number(m[1]);
   const setOf = normalized.match(/\b(?:set|lot)\s+of\s+(\d+)\b/);
   return setOf ? Number(setOf[1]) : null;
+}
+
+export function extractGridQuantity(title: string): number | null {
+  const normalized = normalizeTitle(title);
+  const match = normalized.match(/\b(\d+)\s*(?:grid|grids|cavity|cavities|cube|cubes|ice cube molds?)\b/);
+  return match ? Number(match[1]) : null;
 }
 
 export function tokenSet(title: string): Set<string> {
@@ -82,7 +114,13 @@ export interface MatchResult {
   reasons: string[];
 }
 
-const ACCESSORY_PATTERNS = [/\b(?:case|cover|shell|skin|protector)\s+(?:cover\s+)?for\b/, /\bprotective\s+(?:case|cover|shell)\b/, /\b(?:replacement|spare)\b/, /\b(?:charger|cable)\s+only\b/, /\b(?:holder|storage box)\b/];
+const ACCESSORY_PATTERNS = [
+  /\b(?:case|cover|shell|skin|protector)\s+(?:cover\s+)?for\b/,
+  /\bprotective\s+(?:case|cover|shell)\b/,
+  /\b(?:replacement|spare)\b/,
+  /\b(?:charger|cable)\s+only\b/,
+  /\b(?:holder|storage box)\b/,
+];
 
 const PRODUCT_CONTEXT_PATTERNS = [
   { id: "sleep_wellness", pattern: /\b(?:sleep|night|snor\w*|breath\w*|nasal|nose|oral|lip|bedtime)\b/ },
@@ -96,8 +134,12 @@ export function detectAccessory(title: string): boolean {
 
 function hasProductContextMismatch(sourceTitle: string, candidateTitle: string): boolean {
   const sourceContexts = PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(sourceTitle))).map(({ id }) => id);
-  const candidateContexts = PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(candidateTitle))).map(({ id }) => id);
-  return sourceContexts.length > 0 && candidateContexts.length > 0 && !sourceContexts.some((context) => candidateContexts.includes(context));
+  const candidateContexts = PRODUCT_CONTEXT_PATTERNS.filter(({ pattern }) => pattern.test(normalizeTitle(candidateTitle))).map(
+    ({ id }) => id,
+  );
+  return (
+    sourceContexts.length > 0 && candidateContexts.length > 0 && !sourceContexts.some((context) => candidateContexts.includes(context))
+  );
 }
 
 export function scoreProductMatch(source: MatchAttributes, ebay: MatchAttributes): MatchResult {
@@ -109,6 +151,13 @@ export function scoreProductMatch(source: MatchAttributes, ebay: MatchAttributes
   if (sourcePack != null && ebayPack != null && sourcePack !== ebayPack) {
     hardReject = true;
     reasons.push("pack_quantity_mismatch");
+  }
+
+  const sourceGrid = extractGridQuantity(source.title);
+  const ebayGrid = extractGridQuantity(ebay.title);
+  if (sourceGrid != null && ebayGrid != null && sourceGrid !== ebayGrid) {
+    hardReject = true;
+    reasons.push("feature_quantity_mismatch");
   }
 
   const sourceCond = (source.condition ?? "NEW").toUpperCase();
