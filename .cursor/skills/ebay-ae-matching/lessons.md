@@ -108,6 +108,18 @@ Concrete failures from production debugging. Prefer the checklist in `SKILL.md`;
 - Keep image search disabled until AliExpress grants the app permission; never scrape the consumer image-search UI as a production substitute.
 - Persist whether an alternative came from keyword or image retrieval, and show alternatives even when a source is attached.
 
+## 8. Missing AE shipping treated as free
+
+**Report / risk:** Affiliate product payloads often omit shipping. Treating that as `$0` inflated profit and allowed false approvals.
+
+**Fix pattern:**
+
+- `isKnownShippingCost` distinguishes free shipping (`0`) from unknown (`null`/`undefined`).
+- Profit is calculated only when shipping is known; otherwise store null economics and `MISSING_SHIPPING_COST`.
+- Prefer known-shipping sources in the shortlist when available.
+- Manual demand may record sold counts, but cannot approve without known shipping.
+- Export requires non-null AE shipping.
+
 ## Validation commands
 
 ```bash

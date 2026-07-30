@@ -32,6 +32,16 @@ export function hasSourcingPriceAdvantage(ebayPriceMinor: number, sourcePriceMin
   return sourcePriceMinor + sourceShippingMinor < ebayPriceMinor;
 }
 
+/** Shipping is known only when the provider returned a finite non-negative amount (including free shipping = 0). */
+export function isKnownShippingCost(shippingMinor: number | null | undefined): shippingMinor is number {
+  return typeof shippingMinor === "number" && Number.isFinite(shippingMinor) && shippingMinor >= 0;
+}
+
+/** Item-only lower bound when AE shipping is unknown — not a full landed-cost proof. */
+export function hasItemPriceBelowEbay(ebayPriceMinor: number, sourcePriceMinor: number): boolean {
+  return sourcePriceMinor < ebayPriceMinor;
+}
+
 function supplierQualityScore(product: AliExpressProduct): number {
   const rating = ((product.rating ?? 0) / 5) * 15;
   const orders = Math.min(Math.log10((product.orderCount ?? 0) + 1) / 3, 1) * 10;

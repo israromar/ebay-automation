@@ -43,10 +43,11 @@ When the user says a match is wrong, classify first:
 8. **Statuses must be truthful.** Blocking reasons (`SOURCE_PRICE_NOT_BELOW_EBAY`, `MARGIN_TOO_LOW`, pack/visual/confidence failures) must not surface as successful `AE_MATCHED`.
 9. **Every user-reported miss becomes a regression test** with the real title pair (and query assertion when retrieval was the bug).
 10. **No AE source means no approval.** Demand entry must not approve unless AE product ID, URL, price, and match confidence are present. Never default missing source cost to zero.
-11. **Exports repeat the same validity gate.** `APPROVED` in storage is not sufficient; export must independently require AE ID, URL, and price.
+11. **Exports repeat the same validity gate.** `APPROVED` in storage is not sufficient; export must independently require AE ID, URL, price, and known shipping.
 12. **Do not hide retrieval evidence.** Persist and display top evaluated AE alternatives with match, supplier, attribute, and profitability rejection reasons.
 13. **Validate critical numeric attributes.** Pack size, grid/cavity count, capacity, model, and similar explicit quantities override generic title overlap (for example 37-grid ≠ 148-grid).
 14. **Image search expands retrieval; DINOv2 only reranks.** Use the official Affiliate image-search API when authorized, union its hits with keyword results, and retain keyword fallback. Never claim DINOv2 can recover a product absent from the pool.
+15. **Unknown AE shipping is not free.** Missing `shippingMinor` must stay null, force `MISSING_SHIPPING_COST` / manual review, and never inflate profit by treating shipping as `$0`.
 
 ## Change checklist
 

@@ -9,7 +9,13 @@ import {
   tokenSet,
 } from "@/lib/domain/matching";
 import { qualifyAliExpressProduct } from "@/lib/domain/qualification";
-import { applyVisualScoresToRankedSources, hasSourcingPriceAdvantage, rankAliExpressSources } from "@/lib/domain/source-ranking";
+import {
+  applyVisualScoresToRankedSources,
+  hasItemPriceBelowEbay,
+  hasSourcingPriceAdvantage,
+  isKnownShippingCost,
+  rankAliExpressSources,
+} from "@/lib/domain/source-ranking";
 import { deriveTrendIdeaMatchStatus } from "@/lib/domain/trend-match-status";
 import { DEFAULT_VISUAL_MATCH_FLOOR } from "@/lib/domain/visual-matching";
 import {
@@ -322,24 +328,29 @@ export class ScanOrchestrator {
           },
         );
         if (!match.hardReject && match.confidence >= this.rules.minimumMatchConfidence) {
-          if (!hasSourcingPriceAdvantage(listing.priceMinor, ae.priceMinor, ae.shippingMinor ?? 0)) {
+          if (isKnownShippingCost(ae.shippingMinor)) {
+            if (!hasSourcingPriceAdvantage(listing.priceMinor, ae.priceMinor, ae.shippingMinor)) {
+              foundPriceInversion = true;
+              continue;
+            }
+            const listingProfit = calculateProfit({
+              aliexpressItemPriceMinor: ae.priceMinor,
+              aliexpressShippingCostMinor: ae.shippingMinor,
+              additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+              expectedSellingPriceMinor: listing.priceMinor,
+              ebayFeeRate: this.rules.ebayFeeRate,
+              promotedListingRate: this.rules.promotedListingRate,
+              expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+              expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+              otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+              otherPercentageCost: this.rules.otherPercentageCost,
+            });
+            if (listingProfit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
+              foundInsufficientMargin = true;
+              continue;
+            }
+          } else if (!hasItemPriceBelowEbay(listing.priceMinor, ae.priceMinor)) {
             foundPriceInversion = true;
-            continue;
-          }
-          const listingProfit = calculateProfit({
-            aliexpressItemPriceMinor: ae.priceMinor,
-            aliexpressShippingCostMinor: ae.shippingMinor ?? 0,
-            additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
-            expectedSellingPriceMinor: listing.priceMinor,
-            ebayFeeRate: this.rules.ebayFeeRate,
-            promotedListingRate: this.rules.promotedListingRate,
-            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
-            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
-            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
-            otherPercentageCost: this.rules.otherPercentageCost,
-          });
-          if (listingProfit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
-            foundInsufficientMargin = true;
             continue;
           }
         }
@@ -395,9 +406,13 @@ export class ScanOrchestrator {
       }
     }
 
-    const shipping = ae.shippingMinor ?? 0;
-    if (ae.shippingMinor == null && status !== "ALIEXPRESS_REJECTED") {
+    const shipping = ae.shippingMinor;
+    const shippingKnown = isKnownShippingCost(shipping);
+    if (!shippingKnown && status !== "ALIEXPRESS_REJECTED") {
       rejectionCodes.push("MISSING_SHIPPING_COST");
+      if (status === "EBAY_MATCHED") {
+        status = "NEEDS_MANUAL_VALIDATION";
+      }
     }
 
     const expectedPrice = matchSnapshot?.priceMinor ?? 0;
@@ -405,18 +420,20 @@ export class ScanOrchestrator {
     const matchedUrl = matchSnapshot?.url;
     const matchedConfidence = matchSnapshot?.confidence;
     const matchedTitle = matchSnapshot?.title;
-    const profit = calculateProfit({
-      aliexpressItemPriceMinor: ae.priceMinor,
-      aliexpressShippingCostMinor: shipping,
-      additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
-      expectedSellingPriceMinor: expectedPrice,
-      ebayFeeRate: this.rules.ebayFeeRate,
-      promotedListingRate: this.rules.promotedListingRate,
-      expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
-      expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
-      otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
-      otherPercentageCost: this.rules.otherPercentageCost,
-    });
+    const profit = isKnownShippingCost(shipping)
+      ? calculateProfit({
+          aliexpressItemPriceMinor: ae.priceMinor,
+          aliexpressShippingCostMinor: shipping,
+          additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+          expectedSellingPriceMinor: expectedPrice,
+          ebayFeeRate: this.rules.ebayFeeRate,
+          promotedListingRate: this.rules.promotedListingRate,
+          expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+          expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+          otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+          otherPercentageCost: this.rules.otherPercentageCost,
+        })
+      : null;
 
     if (
       demandVerified &&
@@ -425,18 +442,22 @@ export class ScanOrchestrator {
       status !== "EBAY_MATCH_REQUIRED" &&
       status !== "NEEDS_MANUAL_VALIDATION"
     ) {
-      if (profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
-        status = "UNPROFITABLE";
-        rejectionCodes.push("MARGIN_TOO_LOW");
+      if (!profit || profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
+        status = profit ? "UNPROFITABLE" : "NEEDS_MANUAL_VALIDATION";
+        rejectionCodes.push(profit ? "MARGIN_TOO_LOW" : "MISSING_SHIPPING_COST");
       } else {
         status = "APPROVED";
       }
     }
 
-    // Never approve without verified demand
+    // Never approve without verified demand or known shipping
     if (status === "APPROVED" && !demandVerified) {
       status = "NEEDS_MANUAL_VALIDATION";
       rejectionCodes.push("EBAY_SOLD_HISTORY_UNAVAILABLE");
+    }
+    if (status === "APPROVED" && !shippingKnown) {
+      status = "NEEDS_MANUAL_VALIDATION";
+      rejectionCodes.push("MISSING_SHIPPING_COST");
     }
 
     const candidate = await prisma.productCandidate.create({
@@ -450,8 +471,8 @@ export class ScanOrchestrator {
         aliexpressProductId: ae.productId,
         aliexpressUrl: ae.url,
         aliexpressPriceMinor: ae.priceMinor,
-        aliexpressShippingMinor: shipping,
-        adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
+        aliexpressShippingMinor: shipping ?? null,
+        adjustedSourceCostMinor: profit?.adjustedSourceCostMinor ?? null,
         rating: ae.rating,
         reviewCount: ae.reviewCount,
         orderCount: ae.orderCount,
@@ -462,9 +483,9 @@ export class ScanOrchestrator {
         soldLast30Days,
         activeListingCount,
         matchConfidence: matchedConfidence,
-        estimatedProfitMinor: profit.estimatedProfitMinor,
-        netMarginPercent: profit.profitMarginPercent,
-        returnOnCostPercent: profit.returnOnCostPercent,
+        estimatedProfitMinor: profit?.estimatedProfitMinor ?? null,
+        netMarginPercent: profit?.profitMarginPercent ?? null,
+        returnOnCostPercent: profit?.returnOnCostPercent ?? null,
         rejectionReasonsJson: JSON.stringify(rejectionCodes),
         demandVerified,
         dataSource: ae.meta.source,
@@ -495,23 +516,27 @@ export class ScanOrchestrator {
             warningsJson: JSON.stringify(ae.meta.warnings),
           },
         },
-        profitCalculations: {
-          create: {
-            expectedSellingPriceMinor: expectedPrice,
-            grossRevenueMinor: profit.grossRevenueMinor,
-            adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
-            marketplaceFeesMinor: profit.marketplaceFeesMinor,
-            promotedListingFeeMinor: profit.promotedListingFeeMinor,
-            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
-            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
-            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
-            totalEstimatedCostMinor: profit.totalEstimatedCostMinor,
-            estimatedProfitMinor: profit.estimatedProfitMinor,
-            profitMarginPercent: profit.profitMarginPercent,
-            returnOnCostPercent: profit.returnOnCostPercent,
-            assumptionsJson: JSON.stringify(this.rules),
-          },
-        },
+        ...(profit
+          ? {
+              profitCalculations: {
+                create: {
+                  expectedSellingPriceMinor: expectedPrice,
+                  grossRevenueMinor: profit.grossRevenueMinor,
+                  adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
+                  marketplaceFeesMinor: profit.marketplaceFeesMinor,
+                  promotedListingFeeMinor: profit.promotedListingFeeMinor,
+                  expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+                  expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+                  otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+                  totalEstimatedCostMinor: profit.totalEstimatedCostMinor,
+                  estimatedProfitMinor: profit.estimatedProfitMinor,
+                  profitMarginPercent: profit.profitMarginPercent,
+                  returnOnCostPercent: profit.returnOnCostPercent,
+                  assumptionsJson: JSON.stringify(this.rules),
+                },
+              },
+            }
+          : {}),
         rejectionReasons: {
           create: rejectionCodes.map((code) => ({ code })),
         },
@@ -577,13 +602,17 @@ export class ScanOrchestrator {
       rules: this.rules,
     });
 
-    const priceEligibleSources = rankedText.filter(({ product }) =>
-      hasSourcingPriceAdvantage(ebay.priceMinor, product.priceMinor, product.shippingMinor ?? 0),
-    );
+    const priceEligibleSources = rankedText.filter(({ product }) => {
+      if (!isKnownShippingCost(product.shippingMinor)) {
+        return hasItemPriceBelowEbay(ebay.priceMinor, product.priceMinor);
+      }
+      return hasSourcingPriceAdvantage(ebay.priceMinor, product.priceMinor, product.shippingMinor);
+    });
     const profitableSources = priceEligibleSources.filter(({ product }) => {
+      if (!isKnownShippingCost(product.shippingMinor)) return true;
       const profit = calculateProfit({
         aliexpressItemPriceMinor: product.priceMinor,
-        aliexpressShippingCostMinor: product.shippingMinor ?? 0,
+        aliexpressShippingCostMinor: product.shippingMinor,
         additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
         expectedSellingPriceMinor: ebay.priceMinor,
         ebayFeeRate: this.rules.ebayFeeRate,
@@ -595,7 +624,8 @@ export class ScanOrchestrator {
       });
       return profit.profitMarginPercent >= this.rules.minimumNetMarginPercent;
     });
-    const shortlist = profitableSources.slice(0, 20);
+    const knownShippingProfitable = profitableSources.filter(({ product }) => isKnownShippingCost(product.shippingMinor));
+    const shortlist = (knownShippingProfitable.length > 0 ? knownShippingProfitable : profitableSources).slice(0, 20);
     let rankedSources = shortlist;
     let visualAttempted = false;
     let visualAvailableCount = 0;
@@ -702,29 +732,36 @@ export class ScanOrchestrator {
       }
     }
 
-    const shipping = selectedAe?.shippingMinor ?? 0;
-    if (selectedAe && selectedAe.shippingMinor == null && status !== "ALIEXPRESS_REJECTED") {
+    const shipping = selectedAe?.shippingMinor;
+    const shippingKnown = isKnownShippingCost(shipping);
+    if (selectedAe && !shippingKnown && status !== "ALIEXPRESS_REJECTED") {
       rejectionCodes.push("MISSING_SHIPPING_COST");
+      if (status === "EBAY_MATCHED") {
+        status = "NEEDS_MANUAL_VALIDATION";
+      }
     }
 
     const expectedPrice = ebay.priceMinor;
-    const profit = calculateProfit({
-      aliexpressItemPriceMinor: selectedAe?.priceMinor ?? 0,
-      aliexpressShippingCostMinor: shipping,
-      additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
-      expectedSellingPriceMinor: expectedPrice,
-      ebayFeeRate: this.rules.ebayFeeRate,
-      promotedListingRate: this.rules.promotedListingRate,
-      expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
-      expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
-      otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
-      otherPercentageCost: this.rules.otherPercentageCost,
-    });
+    const profit =
+      selectedAe && isKnownShippingCost(shipping)
+        ? calculateProfit({
+            aliexpressItemPriceMinor: selectedAe.priceMinor,
+            aliexpressShippingCostMinor: shipping,
+            additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+            expectedSellingPriceMinor: expectedPrice,
+            ebayFeeRate: this.rules.ebayFeeRate,
+            promotedListingRate: this.rules.promotedListingRate,
+            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+            otherPercentageCost: this.rules.otherPercentageCost,
+          })
+        : null;
 
     if (demandVerified && status !== "DEMAND_NOT_VERIFIED" && status !== "ALIEXPRESS_REJECTED" && status !== "NEEDS_MANUAL_VALIDATION") {
-      if (profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
-        status = "UNPROFITABLE";
-        rejectionCodes.push("MARGIN_TOO_LOW");
+      if (!profit || profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
+        status = profit ? "UNPROFITABLE" : "NEEDS_MANUAL_VALIDATION";
+        rejectionCodes.push(profit ? "MARGIN_TOO_LOW" : "MISSING_SHIPPING_COST");
       } else {
         status = "APPROVED";
       }
@@ -733,6 +770,10 @@ export class ScanOrchestrator {
     if (status === "APPROVED" && !demandVerified) {
       status = "NEEDS_MANUAL_VALIDATION";
       rejectionCodes.push("EBAY_SOLD_HISTORY_UNAVAILABLE");
+    }
+    if (status === "APPROVED" && !shippingKnown) {
+      status = "NEEDS_MANUAL_VALIDATION";
+      rejectionCodes.push("MISSING_SHIPPING_COST");
     }
 
     const matchConfidence = selectedAe ? topConfidence : undefined;
@@ -775,8 +816,8 @@ export class ScanOrchestrator {
         aliexpressProductId: selectedAe?.productId,
         aliexpressUrl: selectedAe?.url,
         aliexpressPriceMinor: selectedAe?.priceMinor,
-        aliexpressShippingMinor: selectedAe ? shipping : null,
-        adjustedSourceCostMinor: selectedAe ? profit.adjustedSourceCostMinor : null,
+        aliexpressShippingMinor: selectedAe ? (shipping ?? null) : null,
+        adjustedSourceCostMinor: profit?.adjustedSourceCostMinor ?? null,
         rating: selectedAe?.rating,
         reviewCount: selectedAe?.reviewCount,
         orderCount: selectedAe?.orderCount,
@@ -787,9 +828,9 @@ export class ScanOrchestrator {
         soldLast30Days,
         activeListingCount,
         matchConfidence,
-        estimatedProfitMinor: selectedAe ? profit.estimatedProfitMinor : null,
-        netMarginPercent: selectedAe ? profit.profitMarginPercent : null,
-        returnOnCostPercent: selectedAe ? profit.returnOnCostPercent : null,
+        estimatedProfitMinor: profit?.estimatedProfitMinor ?? null,
+        netMarginPercent: profit?.profitMarginPercent ?? null,
+        returnOnCostPercent: profit?.returnOnCostPercent ?? null,
         rejectionReasonsJson: JSON.stringify(rejectionCodes),
         demandVerified,
         dataSource: ebay.meta.source,
@@ -882,26 +923,31 @@ export class ScanOrchestrator {
                     visualSimilarity: selectedSource?.visualSimilarity,
                     visualAvailable: selectedSource?.visualAvailable,
                     combinedConfidence: selectedSource?.combinedConfidence,
+                    shippingKnown,
                   }),
                 },
               },
-              profitCalculations: {
-                create: {
-                  expectedSellingPriceMinor: expectedPrice,
-                  grossRevenueMinor: profit.grossRevenueMinor,
-                  adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
-                  marketplaceFeesMinor: profit.marketplaceFeesMinor,
-                  promotedListingFeeMinor: profit.promotedListingFeeMinor,
-                  expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
-                  expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
-                  otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
-                  totalEstimatedCostMinor: profit.totalEstimatedCostMinor,
-                  estimatedProfitMinor: profit.estimatedProfitMinor,
-                  profitMarginPercent: profit.profitMarginPercent,
-                  returnOnCostPercent: profit.returnOnCostPercent,
-                  assumptionsJson: JSON.stringify(this.rules),
-                },
-              },
+              ...(profit
+                ? {
+                    profitCalculations: {
+                      create: {
+                        expectedSellingPriceMinor: expectedPrice,
+                        grossRevenueMinor: profit.grossRevenueMinor,
+                        adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
+                        marketplaceFeesMinor: profit.marketplaceFeesMinor,
+                        promotedListingFeeMinor: profit.promotedListingFeeMinor,
+                        expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+                        expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+                        otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+                        totalEstimatedCostMinor: profit.totalEstimatedCostMinor,
+                        estimatedProfitMinor: profit.estimatedProfitMinor,
+                        profitMarginPercent: profit.profitMarginPercent,
+                        returnOnCostPercent: profit.returnOnCostPercent,
+                        assumptionsJson: JSON.stringify(this.rules),
+                      },
+                    },
+                  }
+                : {}),
             }
           : {}),
         rejectionReasons: {
@@ -1002,27 +1048,33 @@ export class ScanOrchestrator {
     });
 
     const expectedPrice = observation.avgCompletedSaleMinor ?? observation.medianCompletedSaleMinor ?? candidate.ebayCurrentPriceMinor ?? 0;
-    const shipping = candidate.aliexpressShippingMinor ?? 0;
-    const profit = calculateProfit({
-      aliexpressItemPriceMinor: candidate.aliexpressPriceMinor ?? 0,
-      aliexpressShippingCostMinor: shipping,
-      additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
-      expectedSellingPriceMinor: expectedPrice,
-      ebayFeeRate: this.rules.ebayFeeRate,
-      promotedListingRate: this.rules.promotedListingRate,
-      expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
-      expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
-      otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
-      otherPercentageCost: this.rules.otherPercentageCost,
-    });
+    const shipping = candidate.aliexpressShippingMinor;
+    const shippingKnown = isKnownShippingCost(shipping);
+    const profit = isKnownShippingCost(shipping)
+      ? calculateProfit({
+          aliexpressItemPriceMinor: candidate.aliexpressPriceMinor,
+          aliexpressShippingCostMinor: shipping,
+          additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+          expectedSellingPriceMinor: expectedPrice,
+          ebayFeeRate: this.rules.ebayFeeRate,
+          promotedListingRate: this.rules.promotedListingRate,
+          expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+          expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+          otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+          otherPercentageCost: this.rules.otherPercentageCost,
+        })
+      : null;
 
     const rejectionCodes: RejectionCode[] = [];
     let status: CandidateStatus = "EBAY_MATCHED";
 
-    if (observation.soldLast30Days < this.rules.minimumRecentSales) {
+    if (!shippingKnown) {
+      status = "NEEDS_MANUAL_VALIDATION";
+      rejectionCodes.push("MISSING_SHIPPING_COST");
+    } else if (observation.soldLast30Days < this.rules.minimumRecentSales) {
       status = "DEMAND_NOT_VERIFIED";
       rejectionCodes.push("EBAY_RECENT_SALES_TOO_LOW");
-    } else if (profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
+    } else if (!profit || profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
       status = "UNPROFITABLE";
       rejectionCodes.push("MARGIN_TOO_LOW");
     } else {
@@ -1037,29 +1089,33 @@ export class ScanOrchestrator {
         soldLast30Days: observation.soldLast30Days,
         avgCompletedSaleMinor: observation.avgCompletedSaleMinor,
         medianCompletedSaleMinor: observation.medianCompletedSaleMinor,
-        estimatedProfitMinor: profit.estimatedProfitMinor,
-        netMarginPercent: profit.profitMarginPercent,
-        returnOnCostPercent: profit.returnOnCostPercent,
-        adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
+        estimatedProfitMinor: profit?.estimatedProfitMinor ?? null,
+        netMarginPercent: profit?.profitMarginPercent ?? null,
+        returnOnCostPercent: profit?.returnOnCostPercent ?? null,
+        adjustedSourceCostMinor: profit?.adjustedSourceCostMinor ?? null,
         rejectionReasonsJson: JSON.stringify(rejectionCodes),
         lastVerifiedAt: new Date(),
-        profitCalculations: {
-          create: {
-            expectedSellingPriceMinor: expectedPrice,
-            grossRevenueMinor: profit.grossRevenueMinor,
-            adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
-            marketplaceFeesMinor: profit.marketplaceFeesMinor,
-            promotedListingFeeMinor: profit.promotedListingFeeMinor,
-            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
-            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
-            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
-            totalEstimatedCostMinor: profit.totalEstimatedCostMinor,
-            estimatedProfitMinor: profit.estimatedProfitMinor,
-            profitMarginPercent: profit.profitMarginPercent,
-            returnOnCostPercent: profit.returnOnCostPercent,
-            assumptionsJson: JSON.stringify({ ...this.rules, demandSource: "manual" }),
-          },
-        },
+        ...(profit
+          ? {
+              profitCalculations: {
+                create: {
+                  expectedSellingPriceMinor: expectedPrice,
+                  grossRevenueMinor: profit.grossRevenueMinor,
+                  adjustedSourceCostMinor: profit.adjustedSourceCostMinor,
+                  marketplaceFeesMinor: profit.marketplaceFeesMinor,
+                  promotedListingFeeMinor: profit.promotedListingFeeMinor,
+                  expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+                  expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+                  otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+                  totalEstimatedCostMinor: profit.totalEstimatedCostMinor,
+                  estimatedProfitMinor: profit.estimatedProfitMinor,
+                  profitMarginPercent: profit.profitMarginPercent,
+                  returnOnCostPercent: profit.returnOnCostPercent,
+                  assumptionsJson: JSON.stringify({ ...this.rules, demandSource: "manual" }),
+                },
+              },
+            }
+          : {}),
         manualReviews: {
           create: {
             action: "DEMAND_VALIDATED",
@@ -1093,6 +1149,7 @@ export class ScanOrchestrator {
         aliexpressProductId: { not: null },
         aliexpressUrl: { not: null },
         aliexpressPriceMinor: { not: null },
+        aliexpressShippingMinor: { not: null },
       },
     });
     const rows: ExportCandidateRow[] = approved.map((c) => ({

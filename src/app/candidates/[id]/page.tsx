@@ -167,6 +167,7 @@ export default function CandidateDetailPage() {
     typeof candidate.aliexpressPriceMinor === "number" &&
     typeof candidate.matchConfidence === "number",
   );
+  const hasKnownShipping = typeof candidate.aliexpressShippingMinor === "number";
   const aeAlternatives = ((candidate.sourceProducts as Array<Record<string, unknown>>) ?? [])
     .filter((source) => source.marketplace === "aliexpress_alternative")
     .map(readAliExpressAlternative)
@@ -191,7 +192,9 @@ export default function CandidateDetailPage() {
               <li>Reviews: {String(candidate.reviewCount ?? "—")}</li>
               <li>Orders: {String(candidate.orderCount ?? "—")}</li>
               <li>Price: {money(candidate.aliexpressPriceMinor)}</li>
-              <li>Shipping: {money(candidate.aliexpressShippingMinor)}</li>
+              <li>
+                Shipping: {typeof candidate.aliexpressShippingMinor === "number" ? money(candidate.aliexpressShippingMinor) : "Unknown"}
+              </li>
             </ul>
             {aeAlternatives.length > 0 ? (
               <div className="space-y-2 border-t border-slate-200 pt-3">
@@ -263,10 +266,16 @@ export default function CandidateDetailPage() {
       <section className={`rounded-lg border p-4 text-sm ${needsDemand ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
         <h3 className="font-medium">Sold history / demand validation</h3>
         {hasValidatedAe ? (
-          <p className="mt-1 text-slate-700">
-            Browse API cannot supply sold counts. Open eBay sold history while logged in, then enter the numbers here. Approval requires
-            verified demand.
-          </p>
+          hasKnownShipping ? (
+            <p className="mt-1 text-slate-700">
+              Browse API cannot supply sold counts. Open eBay sold history while logged in, then enter the numbers here. Approval requires
+              verified demand.
+            </p>
+          ) : (
+            <p className="mt-1 font-medium text-amber-800">
+              AE shipping is unknown, so profit and approval stay blocked. You can still record sold counts for later review.
+            </p>
+          )
         ) : (
           <p className="mt-1 font-medium text-amber-800">
             Demand can be recorded only after a qualified AliExpress source is attached. This candidate cannot be approved yet.

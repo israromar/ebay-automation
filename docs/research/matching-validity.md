@@ -15,15 +15,16 @@ A candidate may be `APPROVED` only when all of the following are true:
 3. Net margin meets the workspace minimum.
 4. Demand is verified and meets the minimum recent-sales rule.
 5. No blocking match, supplier, visual, pack, feature, or context rejection remains.
+6. AE shipping cost is known (including free shipping as `0`). Missing shipping is unknown—not zero—and blocks approval.
 
-Missing AE cost is unknown—not zero. Manual demand validation must return a conflict instead of approving an eBay-only candidate.
+Missing AE cost is unknown—not zero. Manual demand validation must return a conflict instead of approving an eBay-only candidate. Demand entry with a validated AE source but unknown shipping may record sold counts, but must not approve.
 
 ## Export validity
 
 Export independently requires:
 
 - Candidate status is `APPROVED` or `EXPORT_PENDING`.
-- AE product ID, URL, and price are non-null.
+- AE product ID, URL, price, and shipping are non-null.
 
 This defense prevents stale or historically corrupted statuses from reaching downstream listing workflows.
 
