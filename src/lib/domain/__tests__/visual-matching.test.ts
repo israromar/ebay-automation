@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyVisualScoresToRankedSources, rankAliExpressSources } from "@/lib/domain/source-ranking";
+import { applyVisualScoresToRankedSources, hasSourcingPriceAdvantage, rankAliExpressSources } from "@/lib/domain/source-ranking";
 import { combineTextAndVisualConfidence, cosineSimilarity, visualSimilarityToScore } from "@/lib/domain/visual-matching";
 import { DEFAULT_RULES, type AliExpressProduct } from "@/lib/domain/types";
 
@@ -27,6 +27,12 @@ function source(id: string, title: string, rating: number, priceMinor: number): 
 }
 
 describe("visual matching math", () => {
+  it("requires the landed source cost to be below the eBay price", () => {
+    expect(hasSourcingPriceAdvantage(521, 2664, 0)).toBe(false);
+    expect(hasSourcingPriceAdvantage(3000, 2000, 500)).toBe(true);
+    expect(hasSourcingPriceAdvantage(2500, 2000, 500)).toBe(false);
+  });
+
   it("computes cosine similarity for identical vectors", () => {
     expect(cosineSimilarity([1, 0, 0], [1, 0, 0])).toBeCloseTo(1);
     expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0);

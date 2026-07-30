@@ -28,6 +28,10 @@ export interface VisualScoreInput {
   available: boolean;
 }
 
+export function hasSourcingPriceAdvantage(ebayPriceMinor: number, sourcePriceMinor: number, sourceShippingMinor = 0): boolean {
+  return sourcePriceMinor + sourceShippingMinor < ebayPriceMinor;
+}
+
 function supplierQualityScore(product: AliExpressProduct): number {
   const rating = ((product.rating ?? 0) / 5) * 15;
   const orders = Math.min(Math.log10((product.orderCount ?? 0) + 1) / 3, 1) * 10;

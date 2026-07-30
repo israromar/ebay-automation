@@ -26,6 +26,18 @@ describe("deriveTrendIdeaMatchStatus", () => {
     ).toBe("REJECTED");
   });
 
+  it("rejects a source that costs more than the eBay listing", () => {
+    expect(
+      deriveTrendIdeaMatchStatus({
+        aliexpressProductId: "ae-1",
+        matchConfidence: 90,
+        candidateStatus: "UNPROFITABLE",
+        rejectionReasonsJson: JSON.stringify(["SOURCE_PRICE_NOT_BELOW_EBAY"]),
+        minimumMatchConfidence: 70,
+      }),
+    ).toBe("REJECTED");
+  });
+
   it("keeps a qualified AE match despite unrelated manual demand checks", () => {
     expect(
       deriveTrendIdeaMatchStatus({

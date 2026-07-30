@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { calculateProfit, formatMinor } from "@/lib/domain/profit";
 import { buildAliExpressSearchQueries, candidateFingerprint, scoreProductMatch } from "@/lib/domain/matching";
 import { qualifyAliExpressProduct } from "@/lib/domain/qualification";
-import { applyVisualScoresToRankedSources, rankAliExpressSources } from "@/lib/domain/source-ranking";
+import { applyVisualScoresToRankedSources, hasSourcingPriceAdvantage, rankAliExpressSources } from "@/lib/domain/source-ranking";
 import { deriveTrendIdeaMatchStatus } from "@/lib/domain/trend-match-status";
 import { DEFAULT_VISUAL_MATCH_FLOOR } from "@/lib/domain/visual-matching";
 import { DEFAULT_RULES, type AliExpressProduct, type CandidateStatus, type EbayListing, type QualificationRules, type RejectionCode } from "@/lib/domain/types";
@@ -283,6 +283,8 @@ export class ScanOrchestrator {
     };
     let selectedMatch: MatchCandidate | undefined;
     let activeListingCount = 0;
+    let foundPriceInversion = false;
+    let foundInsufficientMargin = false;
 
     if (status !== "ALIEXPRESS_REJECTED") {
       // For incomplete AliExpress fields, still attempt eBay matching so operator has comps.
@@ -303,6 +305,28 @@ export class ScanOrchestrator {
             priceMinor: listing.priceMinor,
           },
         );
+        if (!match.hardReject && match.confidence >= this.rules.minimumMatchConfidence) {
+          if (!hasSourcingPriceAdvantage(listing.priceMinor, ae.priceMinor, ae.shippingMinor ?? 0)) {
+            foundPriceInversion = true;
+            continue;
+          }
+          const listingProfit = calculateProfit({
+            aliexpressItemPriceMinor: ae.priceMinor,
+            aliexpressShippingCostMinor: ae.shippingMinor ?? 0,
+            additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+            expectedSellingPriceMinor: listing.priceMinor,
+            ebayFeeRate: this.rules.ebayFeeRate,
+            promotedListingRate: this.rules.promotedListingRate,
+            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+            otherPercentageCost: this.rules.otherPercentageCost,
+          });
+          if (listingProfit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
+            foundInsufficientMargin = true;
+            continue;
+          }
+        }
         if (!match.hardReject && match.confidence > topConfidence) {
           topConfidence = match.confidence;
           selectedMatch = {
@@ -316,7 +340,12 @@ export class ScanOrchestrator {
       }
 
       if (!selectedMatch || selectedMatch.confidence < this.rules.minimumMatchConfidence) {
-        status = "EBAY_MATCH_REQUIRED";
+        if (!selectedMatch && (foundPriceInversion || foundInsufficientMargin)) {
+          status = "UNPROFITABLE";
+          rejectionCodes.push(foundPriceInversion ? "SOURCE_PRICE_NOT_BELOW_EBAY" : "MARGIN_TOO_LOW");
+        } else {
+          status = "EBAY_MATCH_REQUIRED";
+        }
         if (selectedMatch && selectedMatch.confidence < this.rules.minimumMatchConfidence) {
           rejectionCodes.push("MATCH_CONFIDENCE_TOO_LOW");
         }
@@ -525,7 +554,23 @@ export class ScanOrchestrator {
       rules: this.rules,
     });
 
-    const shortlist = rankedText.slice(0, 20);
+    const priceEligibleSources = rankedText.filter(({ product }) => hasSourcingPriceAdvantage(ebay.priceMinor, product.priceMinor, product.shippingMinor ?? 0));
+    const profitableSources = priceEligibleSources.filter(({ product }) => {
+      const profit = calculateProfit({
+        aliexpressItemPriceMinor: product.priceMinor,
+        aliexpressShippingCostMinor: product.shippingMinor ?? 0,
+        additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+        expectedSellingPriceMinor: ebay.priceMinor,
+        ebayFeeRate: this.rules.ebayFeeRate,
+        promotedListingRate: this.rules.promotedListingRate,
+        expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+        expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+        otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+        otherPercentageCost: this.rules.otherPercentageCost,
+      });
+      return profit.profitMarginPercent >= this.rules.minimumNetMarginPercent;
+    });
+    const shortlist = profitableSources.slice(0, 20);
     let rankedSources = shortlist;
     let visualAttempted = false;
     let visualAvailableCount = 0;
@@ -571,12 +616,20 @@ export class ScanOrchestrator {
     const topConfidence = selectedSource?.combinedConfidence ?? selectedSource?.match.confidence ?? 0;
 
     if (!selectedSource) {
-      status = "NEEDS_MANUAL_VALIDATION";
-      if (!visualAttempted) {
-        rejectionCodes.push("NO_QUALIFIED_ALIEXPRESS_SOURCE");
-      } else if (visualAvailableCount === 0) {
-        rejectionCodes.push("VISUAL_MATCH_UNAVAILABLE");
+      if (rankedText.length > 0 && priceEligibleSources.length === 0) {
+        status = "UNPROFITABLE";
+        rejectionCodes.push("SOURCE_PRICE_NOT_BELOW_EBAY");
+      } else if (priceEligibleSources.length > 0 && profitableSources.length === 0) {
+        status = "UNPROFITABLE";
+        rejectionCodes.push("MARGIN_TOO_LOW");
       } else {
+        status = "NEEDS_MANUAL_VALIDATION";
+      }
+      if (status === "NEEDS_MANUAL_VALIDATION" && !visualAttempted) {
+        rejectionCodes.push("NO_QUALIFIED_ALIEXPRESS_SOURCE");
+      } else if (status === "NEEDS_MANUAL_VALIDATION" && visualAvailableCount === 0) {
+        rejectionCodes.push("VISUAL_MATCH_UNAVAILABLE");
+      } else if (status === "NEEDS_MANUAL_VALIDATION") {
         rejectionCodes.push("VISUAL_MATCH_TOO_LOW");
       }
     } else if (topConfidence < this.rules.minimumMatchConfidence) {
