@@ -125,6 +125,14 @@ const ACCESSORY_PATTERNS = [
 const PRODUCT_CONTEXT_PATTERNS = [
   { id: "sleep_wellness", pattern: /\b(?:sleep|night|snor\w*|breath\w*|nasal|nose|oral|lip|bedtime)\b/ },
   { id: "textile_sewing", pattern: /\b(?:pant|pants|hem|hemming|fabric|sewing|iron|ironing|garment|dress|jeans|textile)\b/ },
+  {
+    id: "door_hanging_traction",
+    pattern: /\b(?:over door|door hanging|hanging|suspension|head harness|traction (?:belt|strap|sling))\b/,
+  },
+  {
+    id: "lying_neck_pillow",
+    pattern: /\b(?:traction pillow|massage pillow|neck pillow|shoulder stretcher pillow)\b/,
+  },
 ];
 
 export function detectAccessory(title: string): boolean {

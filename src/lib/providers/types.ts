@@ -1,8 +1,16 @@
 import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
 
+export interface AliExpressImageSearchInput {
+  imageUrl: string;
+  limit?: number;
+  shipToCountry?: string;
+  currency?: string;
+}
+
 export interface AliExpressProvider {
   readonly name: string;
   searchProducts(input: ProductSearchInput): Promise<AliExpressProduct[]>;
+  searchProductsByImage?(input: AliExpressImageSearchInput): Promise<AliExpressProduct[]>;
   getProductDetails(urlOrId: string): Promise<AliExpressProductDetails>;
 }
 

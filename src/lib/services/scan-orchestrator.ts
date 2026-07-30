@@ -559,9 +559,10 @@ export class ScanOrchestrator {
     let status: CandidateStatus = "COLLECTING";
     const rejectionCodes: RejectionCode[] = [];
 
-    const sourceSearch = await this.searchAliExpressSources(ebay.title, keyword);
+    const sourceSearch = await this.searchAliExpressSources(ebay.title, keyword, ebay.imageUrl);
     const aeQuery = sourceSearch.primaryQuery;
     const aeResults = sourceSearch.products;
+    const imageProductIds = new Set(sourceSearch.imageProductIds);
 
     const rankedText = rankAliExpressSources({
       ebay: {
@@ -751,7 +752,8 @@ export class ScanOrchestrator {
         );
         const qualification = qualifyAliExpressProduct(product, this.rules);
         const titleRelevance = Math.round(jaccardSimilarity(tokenSet(ebay.title), tokenSet(product.title)) * 100);
-        return { product, match, qualification, titleRelevance };
+        const retrievalMode = imageProductIds.has(product.productId) ? "image" : "keyword";
+        return { product, match, qualification, titleRelevance, retrievalMode };
       })
       .sort((a, b) => {
         if (a.product.productId === selectedAe?.productId) return -1;
@@ -817,7 +819,7 @@ export class ScanOrchestrator {
               completeness: ebay.meta.completeness,
               warningsJson: JSON.stringify(ebay.meta.warnings),
             },
-            ...alternativeSources.map(({ product, match, qualification, titleRelevance }) => ({
+            ...alternativeSources.map(({ product, match, qualification, titleRelevance, retrievalMode }) => ({
               marketplace: "aliexpress_alternative",
               externalId: product.productId,
               url: product.url,
@@ -827,6 +829,7 @@ export class ScanOrchestrator {
                   match,
                   qualification,
                   titleRelevance,
+                  retrievalMode,
                   selected: product.productId === selectedAe?.productId,
                 },
               }),
@@ -869,6 +872,9 @@ export class ScanOrchestrator {
                     evaluatedSources: aeResults.length,
                     qualifiedSources: rankedSources.length,
                     searchQueries: sourceSearch.queries,
+                    imageSearchAttempted: sourceSearch.imageSearchAttempted,
+                    imageSearchError: sourceSearch.imageSearchError,
+                    retrievedByImage: imageProductIds.has(selectedAe.productId),
                     textConfidence: selectedSource?.match.confidence,
                     visualScore: selectedSource?.visualScore,
                     visualSimilarity: selectedSource?.visualSimilarity,
@@ -911,9 +917,31 @@ export class ScanOrchestrator {
     return candidate;
   }
 
-  private async searchAliExpressSources(title: string, keyword: string) {
+  private async searchAliExpressSources(title: string, keyword: string, imageUrl?: string) {
     const queries = buildAliExpressSearchQueries(title, keyword);
     const products = new Map<string, AliExpressProduct>();
+    const imageProductIds = new Set<string>();
+    let imageSearchAttempted = false;
+    let imageSearchError: string | undefined;
+
+    if (process.env.ALIEXPRESS_IMAGE_SEARCH_ENABLED === "true" && imageUrl && this.deps.aliexpress.searchProductsByImage) {
+      imageSearchAttempted = true;
+      try {
+        const imageResults = await this.deps.aliexpress.searchProductsByImage({
+          imageUrl,
+          limit: 50,
+          shipToCountry: "US",
+          currency: "USD",
+        });
+        for (const product of imageResults) {
+          products.set(product.productId, product);
+          imageProductIds.add(product.productId);
+        }
+      } catch (error) {
+        imageSearchError = error instanceof Error ? error.message : String(error);
+        logWarn("aliexpress_image_search_unavailable", { reason: imageSearchError });
+      }
+    }
 
     for (const query of queries) {
       const results = await this.deps.aliexpress.searchProducts({
@@ -927,6 +955,9 @@ export class ScanOrchestrator {
       primaryQuery: queries[0] ?? keyword,
       queries,
       products: [...products.values()].slice(0, 300),
+      imageProductIds: [...imageProductIds],
+      imageSearchAttempted,
+      imageSearchError,
     };
   }
 

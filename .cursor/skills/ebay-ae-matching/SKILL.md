@@ -46,6 +46,7 @@ When the user says a match is wrong, classify first:
 11. **Exports repeat the same validity gate.** `APPROVED` in storage is not sufficient; export must independently require AE ID, URL, and price.
 12. **Do not hide retrieval evidence.** Persist and display top evaluated AE alternatives with match, supplier, attribute, and profitability rejection reasons.
 13. **Validate critical numeric attributes.** Pack size, grid/cavity count, capacity, model, and similar explicit quantities override generic title overlap (for example 37-grid ≠ 148-grid).
+14. **Image search expands retrieval; DINOv2 only reranks.** Use the official Affiliate image-search API when authorized, union its hits with keyword results, and retain keyword fallback. Never claim DINOv2 can recover a product absent from the pool.
 
 ## Change checklist
 

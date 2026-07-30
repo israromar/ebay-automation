@@ -29,7 +29,17 @@ No trusted AliExpress MCP exists. Prefer **AliExpress Open Platform Affiliate AP
 | Variants                 | Preferred          | Partial                            | Detail APIs may be needed            |
 | Images                   | Dashboard          | Usually                            |                                      |
 
-**Live probe status:** Blocked until credentials provided. Record results in this file after first successful call.
+**Live keyword probe status:** Working with the configured Affiliate credentials.
+
+### Affiliate image search
+
+- Method: `aliexpress.affiliate.image.search`
+- Input: multipart `image_file_bytes`, JPEG compressed to at most 100KB.
+- Retrieval strategy: merge and deduplicate image hits with every keyword-query result before matching and ranking.
+- Runtime switch: `ALIEXPRESS_IMAGE_SEARCH_ENABLED=true`; leave disabled until the app key receives image-search permission.
+- Optional Affiliate value: `ALIEXPRESS_APP_SIGNATURE`.
+
+**Live probe (2026-07-30):** The eBay neck-traction stock image was fetched and compressed to 14,744 bytes. The signed multipart request reached the SG gateway, but AliExpress returned `InsufficientPermission: App does not have permission to access this api`. Request Affiliate Image Search permission for the current app key before enabling the runtime switch.
 
 ## Rate limits
 

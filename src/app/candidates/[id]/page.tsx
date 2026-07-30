@@ -70,6 +70,7 @@ function readAliExpressAlternative(source: Record<string, unknown>) {
       evaluation?: {
         match?: { confidence?: number; reasons?: string[] };
         qualification?: { reasons?: string[]; missingFields?: string[] };
+        retrievalMode?: "image" | "keyword";
       };
     };
     return {
@@ -80,6 +81,7 @@ function readAliExpressAlternative(source: Record<string, unknown>) {
       confidence: raw.evaluation?.match?.confidence,
       reasons: [...(raw.evaluation?.match?.reasons ?? []), ...(raw.evaluation?.qualification?.reasons ?? [])],
       missingFields: raw.evaluation?.qualification?.missingFields ?? [],
+      retrievalMode: raw.evaluation?.retrievalMode ?? "keyword",
       url: String(source.url ?? ""),
     };
   } catch {
@@ -205,7 +207,10 @@ export default function CandidateDetailPage() {
                     rel="noopener noreferrer"
                     className="block rounded-md border border-slate-200 p-2 hover:bg-slate-50"
                   >
-                    <span className="line-clamp-2 font-medium text-teal-800">{alternative.title}</span>
+                    <span className="line-clamp-2 font-medium text-teal-800">
+                      {alternative.retrievalMode === "image" ? "Image search · " : ""}
+                      {alternative.title}
+                    </span>
                     <span className="mt-1 block text-xs text-slate-600">
                       {money(alternative.priceMinor)} · match {alternative.confidence ?? "—"} · rating {alternative.rating ?? "—"} · orders{" "}
                       {alternative.orderCount ?? "—"}

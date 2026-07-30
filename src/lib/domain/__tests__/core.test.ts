@@ -209,6 +209,29 @@ describe("matching", () => {
       reasons: expect.arrayContaining(["product_context_mismatch"]),
     });
   });
+
+  it("rejects a lying traction pillow for an over-door cervical traction device", () => {
+    const match = scoreAliExpressSourceMatch(
+      {
+        title: "Neck Traction Stretcher Cervical Head Brace Pain Relief Device Home Over Door",
+        condition: "NEW",
+        priceMinor: 1899,
+      },
+      {
+        title:
+          "Neck Devices Neck Stretcher Orthopedic Traction Pillow Relief Neck Cervical Traction Pillow Portable Cervical Massage Pillow",
+        condition: "NEW",
+        priceMinor: 563,
+      },
+      "neck stretcher",
+    );
+
+    expect(match).toMatchObject({
+      hardReject: true,
+      confidence: 0,
+      reasons: expect.arrayContaining(["product_context_mismatch"]),
+    });
+  });
 });
 
 describe("scheduler", () => {

@@ -89,6 +89,24 @@ Concrete failures from production debugging. Prefer the checklist in `SKILL.md`;
 - Distinguish retrieval success from qualification failure in the UI.
 - Validate critical product attributes (for example 37-grid vs 148-grid), not only generic title overlap.
 
+## 7. Over-door neck traction matched to a lying pillow
+
+**Report:** eBay `Neck Traction Stretcher ... Home Over Door` was matched to AE `Orthopedic Traction Pillow ... Massage Pillow`. Manual AE image search surfaced the correct hanging device family.
+
+**Findings:**
+
+- Keyword retrieval returned 77 products, including several hanging/door traction devices.
+- DINOv2 ranked an over-door device first at 69 visual score; the selected pillow belonged to a different physical-use context.
+- Exact-looking hanging suppliers did not pass every configured supplier threshold.
+- Official `aliexpress.affiliate.image.search` accepted the signed multipart request but returned `InsufficientPermission` for the current app key.
+
+**Fix pattern:**
+
+- Hard-reject door/hanging traction vs lying/massage pillows as `product_context_mismatch`.
+- Support official image search with a ≤100KB JPEG and union image hits with keyword hits before ranking.
+- Keep image search disabled until AliExpress grants the app permission; never scrape the consumer image-search UI as a production substitute.
+- Persist whether an alternative came from keyword or image retrieval.
+
 ## Validation commands
 
 ```bash

@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "crypto";
+import sharp from "sharp";
 import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
-import type { AliExpressProvider } from "./types";
+import type { AliExpressImageSearchInput, AliExpressProvider } from "./types";
 
 type GatewayParams = Record<string, string | number | boolean | undefined | null>;
 
@@ -96,6 +97,7 @@ function extractProducts(payload: unknown): Record<string, unknown>[] {
   const root = payload as Record<string, unknown>;
   const response =
     (root.aliexpress_affiliate_product_query_response as Record<string, unknown> | undefined) ??
+    (root.aliexpress_affiliate_image_search_response as Record<string, unknown> | undefined) ??
     (root.aliexpress_affiliate_productdetail_get_response as Record<string, unknown> | undefined) ??
     root;
 
@@ -116,6 +118,40 @@ function extractProducts(payload: unknown): Record<string, unknown>[] {
   return [];
 }
 
+export async function prepareAliExpressImageSearchBytes(imageUrl: string): Promise<Uint8Array> {
+  const response = await fetch(imageUrl, {
+    headers: { "User-Agent": "ebay-automation-image-search/0.1" },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Unable to fetch source image: HTTP ${response.status}`);
+  }
+
+  const input = Buffer.from(await response.arrayBuffer());
+  let width = 500;
+  let quality = 75;
+  let output = await sharp(input)
+    .rotate()
+    .resize({ width, height: width, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality })
+    .toBuffer();
+
+  while (output.length > 100_000 && (quality > 35 || width > 240)) {
+    if (quality > 35) quality -= 10;
+    else width -= 80;
+    output = await sharp(input)
+      .rotate()
+      .resize({ width, height: width, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality })
+      .toBuffer();
+  }
+
+  if (output.length > 100_000) {
+    throw new Error(`Compressed image exceeds AliExpress 100KB limit (${output.length} bytes)`);
+  }
+  return new Uint8Array(output);
+}
+
 /**
  * Official Affiliate API adapter.
  * Requires ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID.
@@ -128,6 +164,7 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       appKey: string;
       appSecret: string;
       trackingId?: string;
+      appSignature?: string;
       gatewayUrl?: string;
     },
   ) {}
@@ -153,6 +190,36 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
     }
 
     return [...products.values()].slice(0, requested);
+  }
+
+  async searchProductsByImage(input: AliExpressImageSearchInput): Promise<AliExpressProduct[]> {
+    if (!this.config.appKey || !this.config.appSecret) {
+      throw new Error("AliExpressOfficialApiProvider: missing credentials");
+    }
+
+    const imageBytes = await prepareAliExpressImageSearchBytes(input.imageUrl);
+    const body = await this.callWithImage(
+      "aliexpress.affiliate.image.search",
+      {
+        app_signature: this.config.appSignature ?? this.config.trackingId ?? "default",
+        fields:
+          "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
+        img_cid: "88888888",
+        product_cnt: Math.min(Math.max(input.limit ?? 50, 1), 50),
+        shpt_to: input.shipToCountry ?? "US",
+        sort: "LAST_VOLUME_DESC",
+        target_currency: input.currency ?? "USD",
+        target_language: "en",
+        tracking_id: this.config.trackingId ?? "default",
+      },
+      imageBytes,
+    );
+
+    return extractProducts(body).map((product) => {
+      const mapped = mapProduct(product, `${this.name}:image`);
+      mapped.meta.warnings.push("retrieved_by_image");
+      return mapped;
+    });
   }
 
   private async searchProductPage(input: ProductSearchInput, page: number, pageSize: number): Promise<AliExpressProduct[]> {
@@ -229,6 +296,44 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
     }
     if (!res.ok) {
       throw new Error(`AliExpress API HTTP ${res.status}: ${text.slice(0, 300)}`);
+    }
+    return json;
+  }
+
+  private async callWithImage(method: string, businessParams: GatewayParams, imageBytes: Uint8Array): Promise<unknown> {
+    const params = cleanParams({
+      method,
+      app_key: this.config.appKey,
+      timestamp: gmt8Timestamp(),
+      format: "json",
+      v: "2.0",
+      sign_method: "md5",
+      simplify: "false",
+      ...businessParams,
+    });
+    params.sign = signAliExpressParams(params, this.config.appSecret, "md5");
+
+    const form = new FormData();
+    for (const [key, value] of Object.entries(params)) form.append(key, value);
+    const imageBuffer = new ArrayBuffer(imageBytes.byteLength);
+    new Uint8Array(imageBuffer).set(imageBytes);
+    form.append("image_file_bytes", new Blob([imageBuffer], { type: "image/jpeg" }), "ebay-source.jpg");
+
+    const res = await fetch(this.gatewayUrl, { method: "POST", body: form });
+    const text = await res.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`AliExpress image search non-JSON response (${res.status}): ${text.slice(0, 300)}`);
+    }
+
+    const err = (json as { error_response?: { code?: string; msg?: string; sub_msg?: string } }).error_response;
+    if (err) {
+      throw new Error(`AliExpress image search error: ${err.code ?? "unknown"} ${err.msg ?? ""} ${err.sub_msg ?? ""}`.trim());
+    }
+    if (!res.ok) {
+      throw new Error(`AliExpress image search HTTP ${res.status}: ${text.slice(0, 300)}`);
     }
     return json;
   }

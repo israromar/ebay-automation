@@ -15,6 +15,7 @@ export function createAliExpressProvider(): AliExpressProvider {
       appKey,
       appSecret,
       trackingId: process.env.ALIEXPRESS_TRACKING_ID ?? "default",
+      appSignature: process.env.ALIEXPRESS_APP_SIGNATURE,
     });
   }
   return new AliExpressManualImportProvider(sampleAliExpressCatalog());
