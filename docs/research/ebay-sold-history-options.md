@@ -24,13 +24,13 @@ Business rule: ≥5 confirmed sales in the previous 30 days. Public Browse API c
 
 ## Option C — Licensed third-party providers (approval required)
 
-| Provider | Marketplaces | Sold history | AliExpress | Pricing (public) | Notes |
-|----------|--------------|--------------|------------|------------------|-------|
-| SoldComps | Multiple eBay sites | Up to ~90 days, keyword search | No | Free–$79/mo bands | Unofficial scraper-backed; licence/ToS review required |
-| Apify sold-listings actors | eBay | Completed listings | No | Per-result | Same compliance caveats |
-| ShopAPIS | eBay NA | Sold + active | No | Vendor quote | Review licence |
-| Bright Data / Oxylabs ecommerce APIs | Broad | Via scrape | Possible | $$$ | Enterprise compliance; still ToS risk vs marketplaces |
-| Zik / Terapeak UI | eBay | Yes (UI) | Research tools | Subscription | No bulk API for our stack |
+| Provider                             | Marketplaces        | Sold history                   | AliExpress     | Pricing (public)  | Notes                                                  |
+| ------------------------------------ | ------------------- | ------------------------------ | -------------- | ----------------- | ------------------------------------------------------ |
+| SoldComps                            | Multiple eBay sites | Up to ~90 days, keyword search | No             | Free–$79/mo bands | Unofficial scraper-backed; licence/ToS review required |
+| Apify sold-listings actors           | eBay                | Completed listings             | No             | Per-result        | Same compliance caveats                                |
+| ShopAPIS                             | eBay NA             | Sold + active                  | No             | Vendor quote      | Review licence                                         |
+| Bright Data / Oxylabs ecommerce APIs | Broad               | Via scrape                     | Possible       | $$$               | Enterprise compliance; still ToS risk vs marketplaces  |
+| Zik / Terapeak UI                    | eBay                | Yes (UI)                       | Research tools | Subscription      | No bulk API for our stack                              |
 
 **Do not integrate any paid provider until pricing, licence, data freshness, geo coverage, and ToS risk are approved.**
 

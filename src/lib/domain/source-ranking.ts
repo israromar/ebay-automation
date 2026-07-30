@@ -50,9 +50,14 @@ export function rankAliExpressSources(input: RankAliExpressSourcesInput): Ranked
 
   return input.candidates
     .map((product): RankedAliExpressSource => {
-      const match = scoreAliExpressSourceMatch(input.ebay, { title: product.title, condition: "NEW", priceMinor: product.priceMinor }, input.searchKeyword);
+      const match = scoreAliExpressSourceMatch(
+        input.ebay,
+        { title: product.title, condition: "NEW", priceMinor: product.priceMinor },
+        input.searchKeyword,
+      );
       const qualification = qualifyAliExpressProduct(product, input.rules);
-      const rankScore = match.confidence * 0.65 + supplierQualityScore(product) + sourcingPriceScore(input.ebay.priceMinor, product.priceMinor);
+      const rankScore =
+        match.confidence * 0.65 + supplierQualityScore(product) + sourcingPriceScore(input.ebay.priceMinor, product.priceMinor);
       return { product, match, qualification, rankScore };
     })
     .filter(({ match, qualification }) => !match.hardReject && match.confidence >= softMatchFloor && qualification.reasons.length === 0)
@@ -63,7 +68,11 @@ export function rankAliExpressSources(input: RankAliExpressSourcesInput): Ranked
  * Re-rank a text shortlist with DINOv2 visual scores.
  * Drops candidates with available visual evidence below the floor.
  */
-export function applyVisualScoresToRankedSources(ranked: RankedAliExpressSource[], visuals: VisualScoreInput[], options?: { visualFloor?: number; ebayPriceMinor?: number; requireVisual?: boolean }): RankedAliExpressSource[] {
+export function applyVisualScoresToRankedSources(
+  ranked: RankedAliExpressSource[],
+  visuals: VisualScoreInput[],
+  options?: { visualFloor?: number; ebayPriceMinor?: number; requireVisual?: boolean },
+): RankedAliExpressSource[] {
   const visualFloor = options?.visualFloor ?? DEFAULT_VISUAL_MATCH_FLOOR;
   const byId = new Map(visuals.map((v) => [v.productId, v]));
 
@@ -77,7 +86,11 @@ export function applyVisualScoresToRankedSources(ranked: RankedAliExpressSource[
         visualScore,
         visualAvailable,
       });
-      const rankScore = combinedConfidence * 0.65 + supplierQualityScore(entry.product) + sourcingPriceScore(options?.ebayPriceMinor, entry.product.priceMinor) + (visualAvailable ? (visualScore ?? 0) * 0.15 : 0);
+      const rankScore =
+        combinedConfidence * 0.65 +
+        supplierQualityScore(entry.product) +
+        sourcingPriceScore(options?.ebayPriceMinor, entry.product.priceMinor) +
+        (visualAvailable ? (visualScore ?? 0) * 0.15 : 0);
 
       return {
         ...entry,

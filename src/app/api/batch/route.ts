@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  AliExpressManualImportProvider,
-  sampleAliExpressCatalog,
-} from "@/lib/providers/aliexpress-manual";
+import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
 import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
 import { z } from "zod";
@@ -28,10 +25,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const keywords = [
-    ...(parsed.data.keywords ?? []),
-    ...(parsed.data.csvText ? parseCsvKeywords(parsed.data.csvText) : []),
-  ];
+  const keywords = [...(parsed.data.keywords ?? []), ...(parsed.data.csvText ? parseCsvKeywords(parsed.data.csvText) : [])];
   const urls = parsed.data.aliexpressUrls ?? [];
   if (!keywords.length && !urls.length) {
     return NextResponse.json({ error: "Provide keywords, csvText, or aliexpressUrls" }, { status: 400 });

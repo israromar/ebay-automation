@@ -32,7 +32,10 @@ describe("rankAliExpressSources", () => {
         condition: "NEW",
         priceMinor: 1399,
       },
-      candidates: [source("low-rating", "Portable USB Personal Mini Juicer Cup Handheld Travel Blender", 3.7, 700), source("qualified", "Portable Electric Juice Maker Blender USB Rechargeable Fruit Mixer Juicer", 4.9, 900)],
+      candidates: [
+        source("low-rating", "Portable USB Personal Mini Juicer Cup Handheld Travel Blender", 3.7, 700),
+        source("qualified", "Portable Electric Juice Maker Blender USB Rechargeable Fruit Mixer Juicer", 4.9, 900),
+      ],
       searchKeyword: "portable blender",
       rules: DEFAULT_RULES,
     });

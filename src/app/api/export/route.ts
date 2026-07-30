@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { CsvExporter } from "@/lib/export/csv";
 import { GoogleSheetsApiExporter } from "@/lib/export/google-sheets";
-import {
-  AliExpressManualImportProvider,
-  sampleAliExpressCatalog,
-} from "@/lib/providers/aliexpress-manual";
+import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
 import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
 import path from "path";

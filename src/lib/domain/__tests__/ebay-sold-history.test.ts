@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildEbayPurchaseHistoryUrl, buildEbaySoldSearchUrl, dollarsToMinor, extractNumericEbayItemId } from "@/lib/domain/ebay-sold-history";
+import {
+  buildEbayPurchaseHistoryUrl,
+  buildEbaySoldSearchUrl,
+  dollarsToMinor,
+  extractNumericEbayItemId,
+} from "@/lib/domain/ebay-sold-history";
 
 describe("ebay sold history helpers", () => {
   it("extracts numeric item ids from legacy and URL forms", () => {

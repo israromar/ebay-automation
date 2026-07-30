@@ -32,9 +32,7 @@ export class CsvExporter implements SpreadsheetExporter {
       if (!existing) {
         await writeFile(this.filePath, EXPORT_HEADERS.join(",") + "\n", "utf8");
       }
-      const lines = fresh.map((row) =>
-        EXPORT_HEADERS.map((h) => escapeCsv(String(row[h] ?? ""))).join(","),
-      );
+      const lines = fresh.map((row) => EXPORT_HEADERS.map((h) => escapeCsv(String(row[h] ?? ""))).join(","));
       if (lines.length) {
         await appendFile(this.filePath, lines.join("\n") + "\n", "utf8");
       }

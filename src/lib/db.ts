@@ -15,7 +15,12 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
     trendKeyword?: { findMany?: unknown };
     trendKeywordSnapshot?: { findFirst?: unknown };
   };
-  return typeof c.trendIdea?.findMany === "function" && typeof c.trendResearchRun?.findMany === "function" && typeof c.trendKeyword?.findMany === "function" && typeof c.trendKeywordSnapshot?.findFirst === "function";
+  return (
+    typeof c.trendIdea?.findMany === "function" &&
+    typeof c.trendResearchRun?.findMany === "function" &&
+    typeof c.trendKeyword?.findMany === "function" &&
+    typeof c.trendKeywordSnapshot?.findFirst === "function"
+  );
 }
 
 function getPrisma(): PrismaClient {

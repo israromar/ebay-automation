@@ -14,14 +14,14 @@ Next.js 15, TypeScript, Prisma (SQLite locally; swap `DATABASE_URL` / provider f
 
 ## Why these packages
 
-| Package | Why | Alternative considered |
-|---------|-----|------------------------|
-| Prisma | Typed schema + migrations | Drizzle — similar; Prisma chosen for speed |
-| Zod | Boundary validation | Manual checks — weaker |
-| Playwright | Browser tests + optional collectors | Puppeteer — Playwright preferred |
-| googleapis | Official Sheets API | Community MCP — not for production |
-| @modelcontextprotocol/sdk | Internal Phase 5 MCP | Skip if unused |
-| Vitest | Fast unit tests | Jest — heavier |
+| Package                   | Why                                 | Alternative considered                     |
+| ------------------------- | ----------------------------------- | ------------------------------------------ |
+| Prisma                    | Typed schema + migrations           | Drizzle — similar; Prisma chosen for speed |
+| Zod                       | Boundary validation                 | Manual checks — weaker                     |
+| Playwright                | Browser tests + optional collectors | Puppeteer — Playwright preferred           |
+| googleapis                | Official Sheets API                 | Community MCP — not for production         |
+| @modelcontextprotocol/sdk | Internal Phase 5 MCP                | Skip if unused                             |
+| Vitest                    | Fast unit tests                     | Jest — heavier                             |
 
 ## Quick start
 

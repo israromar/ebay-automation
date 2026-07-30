@@ -81,7 +81,9 @@ export class EbayBrowseApiProvider implements EbayProvider {
       url: item.itemWebUrl ?? `https://www.ebay.com/itm/${item.itemId}`,
       imageUrl: item.image?.imageUrl,
       priceMinor: Math.round(Number(item.price?.value ?? 0) * 100),
-      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100) : undefined,
+      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value
+        ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100)
+        : undefined,
       currency: item.price?.currency ?? "USD",
       condition: item.condition,
       sellerUsername: item.seller?.username,
@@ -134,7 +136,9 @@ export class EbayBrowseApiProvider implements EbayProvider {
       url: item.itemWebUrl ?? `https://www.ebay.com/itm/${item.itemId}`,
       imageUrl: item.image?.imageUrl,
       priceMinor: Math.round(Number(item.price?.value ?? 0) * 100),
-      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100) : undefined,
+      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value
+        ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100)
+        : undefined,
       currency: item.price?.currency ?? "USD",
       condition: item.condition,
       sellerUsername: item.seller?.username,
@@ -168,7 +172,10 @@ export class EbayBrowseApiProvider implements EbayProvider {
         confidence: 0,
         collectedAt: now,
         completeness: "minimal",
-        warnings: ["Sold history requires Marketplace Insights access or manual validation on the candidate page", `insightsAccess=${this.insights.accessState}`],
+        warnings: [
+          "Sold history requires Marketplace Insights access or manual validation on the candidate page",
+          `insightsAccess=${this.insights.accessState}`,
+        ],
       },
     };
   }
@@ -290,7 +297,14 @@ export class EbayBrowseApiProvider implements EbayProvider {
 export class EbayManualDemandProvider {
   readonly name = "EbayManualDemandProvider";
 
-  toDemandResult(observation: { soldLast30Days: number; avgCompletedSaleMinor?: number; medianCompletedSaleMinor?: number; totalHistoricalSold?: number; evidenceUrl?: string; verifiedBy?: string }): EbayDemandResult {
+  toDemandResult(observation: {
+    soldLast30Days: number;
+    avgCompletedSaleMinor?: number;
+    medianCompletedSaleMinor?: number;
+    totalHistoricalSold?: number;
+    evidenceUrl?: string;
+    verifiedBy?: string;
+  }): EbayDemandResult {
     const now = new Date().toISOString();
     return {
       available: true,

@@ -8,10 +8,7 @@ export interface QualificationResult {
 
 export function qualifyAliExpressProduct(
   product: Pick<AliExpressProduct, "rating" | "reviewCount" | "orderCount">,
-  rules: Pick<
-    QualificationRules,
-    "minimumRating" | "minimumReviewCount" | "minimumOrderCount"
-  >,
+  rules: Pick<QualificationRules, "minimumRating" | "minimumReviewCount" | "minimumOrderCount">,
 ): QualificationResult {
   const reasons: RejectionCode[] = [];
   const missingFields: Array<"rating" | "reviewCount" | "orderCount"> = [];

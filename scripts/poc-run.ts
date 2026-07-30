@@ -6,10 +6,7 @@ import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { chromium } from "playwright";
 import { PrismaClient } from "@prisma/client";
-import {
-  AliExpressManualImportProvider,
-  sampleAliExpressCatalog,
-} from "../src/lib/providers/aliexpress-manual";
+import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "../src/lib/providers/aliexpress-manual";
 import { EbayBrowseApiProvider } from "../src/lib/providers/ebay-browse";
 import { CsvExporter } from "../src/lib/export/csv";
 import { ScanOrchestrator } from "../src/lib/services/scan-orchestrator";
@@ -76,8 +73,7 @@ async function main() {
     scanId,
     tracePath,
     exportResult,
-    demandNote:
-      "Official sold-history unavailable via Browse API. PoC used manual validation for one candidate.",
+    demandNote: "Official sold-history unavailable via Browse API. PoC used manual validation for one candidate.",
     mcpDevWorkflow:
       "Use Playwright MCP / cursor-ide-browser for selector discovery; eBay MCP for Browse probes. Production uses these adapters directly.",
     candidates: finalCandidates.map((c) => ({

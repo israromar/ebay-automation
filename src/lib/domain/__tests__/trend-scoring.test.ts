@@ -38,7 +38,13 @@ describe("trend scoring", () => {
   });
 
   it("clusters similar titles and scores ideas", () => {
-    const listings = [listing({ itemId: "1", title: "Portable Rechargeable Blender USB Mini", priceMinor: 2499 }), listing({ itemId: "2", title: "Portable Rechargeable Blender USB Smoothie", priceMinor: 2799 }), listing({ itemId: "3", title: "Portable Rechargeable Personal Blender USB", priceMinor: 2599 }), listing({ itemId: "9", title: "LED Strip Lights 16ft RGB Color Changing", priceMinor: 1999 }), listing({ itemId: "10", title: "LED Strip Lights 16.4ft RGB Remote", priceMinor: 2199 })];
+    const listings = [
+      listing({ itemId: "1", title: "Portable Rechargeable Blender USB Mini", priceMinor: 2499 }),
+      listing({ itemId: "2", title: "Portable Rechargeable Blender USB Smoothie", priceMinor: 2799 }),
+      listing({ itemId: "3", title: "Portable Rechargeable Personal Blender USB", priceMinor: 2599 }),
+      listing({ itemId: "9", title: "LED Strip Lights 16ft RGB Color Changing", priceMinor: 1999 }),
+      listing({ itemId: "10", title: "LED Strip Lights 16.4ft RGB Remote", priceMinor: 2199 }),
+    ];
 
     const clusters = clusterListings(listings, 0.4);
     expect(clusters.length).toBeGreaterThanOrEqual(2);
@@ -57,7 +63,10 @@ describe("trend scoring", () => {
   });
 
   it("filters by price and competition caps", () => {
-    const listings = [listing({ itemId: "1", title: "Portable Blender Cup USB", priceMinor: 800 }), listing({ itemId: "2", title: "Portable Blender Cup Rechargeable", priceMinor: 900 })];
+    const listings = [
+      listing({ itemId: "1", title: "Portable Blender Cup USB", priceMinor: 800 }),
+      listing({ itemId: "2", title: "Portable Blender Cup Rechargeable", priceMinor: 900 }),
+    ];
     const ideas = scoreClustersForKeyword("blender", listings, {
       minEbayPriceMinor: 2000,
       maxEbayPriceMinor: 5000,

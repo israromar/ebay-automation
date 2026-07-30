@@ -70,7 +70,10 @@ describe("visual re-ranking", () => {
         condition: "NEW",
         priceMinor: 1699,
       },
-      candidates: [source("texty", "Portable USB Personal Mini Juicer Cup Handheld Travel Blender", 4.9, 800), source("visual", "Portable Electric Juice Maker Blender USB Rechargeable Fruit Mixer", 4.9, 900)],
+      candidates: [
+        source("texty", "Portable USB Personal Mini Juicer Cup Handheld Travel Blender", 4.9, 800),
+        source("visual", "Portable Electric Juice Maker Blender USB Rechargeable Fruit Mixer", 4.9, 900),
+      ],
       searchKeyword: "portable blender",
       rules: DEFAULT_RULES,
     });
@@ -96,7 +99,11 @@ describe("visual re-ranking", () => {
       rules: DEFAULT_RULES,
     });
 
-    const withRequiredVision = applyVisualScoresToRankedSources(ranked, [{ productId: "unavailable", score: 0, similarity: 0, available: false }], { ebayPriceMinor: 1699, requireVisual: true });
+    const withRequiredVision = applyVisualScoresToRankedSources(
+      ranked,
+      [{ productId: "unavailable", score: 0, similarity: 0, available: false }],
+      { ebayPriceMinor: 1699, requireVisual: true },
+    );
 
     expect(withRequiredVision).toEqual([]);
   });

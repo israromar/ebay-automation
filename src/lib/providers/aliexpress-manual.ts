@@ -1,8 +1,4 @@
-import type {
-  AliExpressProduct,
-  AliExpressProductDetails,
-  ProductSearchInput,
-} from "@/lib/domain/types";
+import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
 import type { AliExpressProvider } from "./types";
 
 /** Fixture / CSV-style provider for PoC without Affiliate API credentials. */
@@ -18,9 +14,7 @@ export class AliExpressManualImportProvider implements AliExpressProvider {
       .filter((t) => t.length > 2);
     const filtered = this.products.filter((p) => {
       const title = p.title.toLowerCase();
-      return tokens.length === 0
-        ? true
-        : tokens.every((t) => title.includes(t)) || title.includes(input.keyword.toLowerCase());
+      return tokens.length === 0 ? true : tokens.every((t) => title.includes(t)) || title.includes(input.keyword.toLowerCase());
     });
     // Prefer products that match the keyword; fall back to catalog slice for demos
     const pool = filtered.length > 0 ? filtered : this.products;
@@ -28,9 +22,7 @@ export class AliExpressManualImportProvider implements AliExpressProvider {
   }
 
   async getProductDetails(urlOrId: string): Promise<AliExpressProductDetails> {
-    const found = this.products.find(
-      (p) => p.productId === urlOrId || p.url === urlOrId || p.url?.includes(urlOrId),
-    );
+    const found = this.products.find((p) => p.productId === urlOrId || p.url === urlOrId || p.url?.includes(urlOrId));
     if (!found) {
       throw new Error(`AliExpress product not found: ${urlOrId}`);
     }

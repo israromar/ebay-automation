@@ -30,15 +30,13 @@ export class GoogleSheetsApiExporter implements SpreadsheetExporter {
         success: false,
         destination: "google_sheets",
         exportedCount: 0,
-        error:
-          "Google credentials not configured — use CsvExporter for local PoC or set GOOGLE_SERVICE_ACCOUNT_JSON",
+        error: "Google credentials not configured — use CsvExporter for local PoC or set GOOGLE_SERVICE_ACCOUNT_JSON",
       };
     }
 
     try {
       const { google } = await import("googleapis");
-      const credRaw =
-        this.config.credentialsJson ?? process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+      const credRaw = this.config.credentialsJson ?? process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
       const credentials = JSON.parse(credRaw);
       const auth = new google.auth.GoogleAuth({
         credentials,

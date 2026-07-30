@@ -33,12 +33,8 @@ export default function ScansPage() {
                 <td className="px-3 py-2">{String(s.keyword ?? "")}</td>
                 <td className="px-3 py-2">{String(s.mode)}</td>
                 <td className="px-3 py-2">{String(s.status)}</td>
-                <td className="px-3 py-2">
-                  {String((s._count as { candidates?: number } | undefined)?.candidates ?? 0)}
-                </td>
-                <td className="px-3 py-2">
-                  {s.startedAt ? new Date(String(s.startedAt)).toLocaleString() : "—"}
-                </td>
+                <td className="px-3 py-2">{String((s._count as { candidates?: number } | undefined)?.candidates ?? 0)}</td>
+                <td className="px-3 py-2">{s.startedAt ? new Date(String(s.startedAt)).toLocaleString() : "—"}</td>
               </tr>
             ))}
           </tbody>

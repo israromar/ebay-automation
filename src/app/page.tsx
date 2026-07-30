@@ -70,8 +70,8 @@ export default function OverviewPage() {
       <section className="space-y-2">
         <h2 className="text-2xl font-semibold">Overview</h2>
         <p className="max-w-2xl text-sm text-slate-600">
-          Sold-history demand is not available from public eBay Browse APIs. Candidates requiring
-          demand proof stay in <strong>NEEDS_MANUAL_VALIDATION</strong> until you confirm sales.
+          Sold-history demand is not available from public eBay Browse APIs. Candidates requiring demand proof stay in{" "}
+          <strong>NEEDS_MANUAL_VALIDATION</strong> until you confirm sales.
         </p>
       </section>
 
@@ -104,8 +104,8 @@ export default function OverviewPage() {
         </div>
         {message ? <p className="mt-2 text-sm text-slate-700">{message}</p> : null}
         <p className="mt-2 text-xs text-slate-500">
-          Last scan: {data?.lastScanTime ? new Date(data.lastScanTime).toLocaleString() : "none"} (
-          {data?.lastScanStatus ?? "n/a"}) · <Link href="/candidates">View candidates</Link>
+          Last scan: {data?.lastScanTime ? new Date(data.lastScanTime).toLocaleString() : "none"} ({data?.lastScanStatus ?? "n/a"}) ·{" "}
+          <Link href="/candidates">View candidates</Link>
         </p>
       </section>
 
@@ -121,9 +121,7 @@ export default function OverviewPage() {
                   <span className="font-medium">{h.provider}</span> · {h.status}
                   {h.message ? ` — ${h.message}` : ""}
                 </span>
-                <span className="text-xs text-slate-500">
-                  {new Date(h.createdAt).toLocaleString()}
-                </span>
+                <span className="text-xs text-slate-500">{new Date(h.createdAt).toLocaleString()}</span>
               </li>
             ))
           )}

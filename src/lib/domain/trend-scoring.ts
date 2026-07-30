@@ -85,10 +85,7 @@ export function medianMinor(values: number[]): number {
 }
 
 /** Greedy clustering by Jaccard title similarity against cluster representative. */
-export function clusterListings(
-  listings: EbayListing[],
-  similarityThreshold = DEFAULT_TREND_CRITERIA.clusterSimilarity,
-): ListingCluster[] {
+export function clusterListings(listings: EbayListing[], similarityThreshold = DEFAULT_TREND_CRITERIA.clusterSimilarity): ListingCluster[] {
   const clusters: Array<{ key: string; repTokens: Set<string>; listings: EbayListing[] }> = [];
 
   for (const listing of listings) {
@@ -122,15 +119,9 @@ export function clusterListings(
   });
 }
 
-export function scoreClustersForKeyword(
-  keyword: string,
-  listings: EbayListing[],
-  criteria: TrendResearchCriteria = {},
-): ScoredTrendIdea[] {
+export function scoreClustersForKeyword(keyword: string, listings: EbayListing[], criteria: TrendResearchCriteria = {}): ScoredTrendIdea[] {
   const c = { ...DEFAULT_TREND_CRITERIA, ...criteria };
-  const priced = listings.filter(
-    (l) => l.priceMinor >= c.minEbayPriceMinor && l.priceMinor <= c.maxEbayPriceMinor,
-  );
+  const priced = listings.filter((l) => l.priceMinor >= c.minEbayPriceMinor && l.priceMinor <= c.maxEbayPriceMinor);
   const clusters = clusterListings(priced, c.clusterSimilarity);
   const ideas: ScoredTrendIdea[] = [];
 
@@ -140,9 +131,7 @@ export function scoreClustersForKeyword(
 
     // Seed = listing closest to median price
     const seed = [...cluster.listings].sort(
-      (a, b) =>
-        Math.abs(a.priceMinor - cluster.priceMedianMinor) -
-        Math.abs(b.priceMinor - cluster.priceMedianMinor),
+      (a, b) => Math.abs(a.priceMinor - cluster.priceMedianMinor) - Math.abs(b.priceMinor - cluster.priceMedianMinor),
     )[0];
     if (!seed) continue;
 

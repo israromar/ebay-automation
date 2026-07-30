@@ -1,8 +1,4 @@
-import type {
-  AliExpressProduct,
-  AliExpressProductDetails,
-  ProductSearchInput,
-} from "@/lib/domain/types";
+import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
 
 export interface AliExpressProvider {
   readonly name: string;
@@ -14,16 +10,12 @@ export interface EbayProvider {
   readonly name: string;
   searchProducts(input: ProductSearchInput): Promise<import("@/lib/domain/types").EbayListing[]>;
   getListingDetails(itemId: string): Promise<import("@/lib/domain/types").EbayListingDetails>;
-  getMarketDemand(
-    input: import("@/lib/domain/types").EbayDemandInput,
-  ): Promise<import("@/lib/domain/types").EbayDemandResult>;
+  getMarketDemand(input: import("@/lib/domain/types").EbayDemandInput): Promise<import("@/lib/domain/types").EbayDemandResult>;
 }
 
 export interface SpreadsheetExporter {
   readonly name: string;
-  exportCandidates(
-    candidates: import("@/lib/export/types").ExportCandidateRow[],
-  ): Promise<import("@/lib/export/types").ExportResult>;
+  exportCandidates(candidates: import("@/lib/export/types").ExportCandidateRow[]): Promise<import("@/lib/export/types").ExportResult>;
 }
 
 export interface BrowserSessionOptions {

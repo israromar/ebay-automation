@@ -75,13 +75,24 @@ export default function SchedulesPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
         <h3 className="font-medium">Export approved candidates</h3>
         <p className="text-sm text-slate-600">
-          Only candidates with status <span className="font-medium">APPROVED</span> are exported. If count is 0, approve one candidate first via Manual demand validation.
+          Only candidates with status <span className="font-medium">APPROVED</span> are exported. If count is 0, approve one candidate first
+          via Manual demand validation.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={exporting} onClick={() => exportApproved("google_sheets")} className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={() => exportApproved("google_sheets")}
+            className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
             {exporting ? "Exporting…" : "Export to Google Sheets"}
           </button>
-          <button type="button" disabled={exporting} onClick={() => exportApproved("csv")} className="rounded-md border px-3 py-2 text-sm disabled:opacity-60">
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={() => exportApproved("csv")}
+            className="rounded-md border px-3 py-2 text-sm disabled:opacity-60"
+          >
             Export approved CSV
           </button>
         </div>

@@ -9,10 +9,7 @@
  */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const BASE = process.env.RESEARCH_API_BASE ?? "http://127.0.0.1:3000";
 const ALLOW_WRITES = process.env.RESEARCH_MCP_ALLOW_WRITES === "true";
@@ -163,11 +160,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             type: "text",
             text: JSON.stringify(
               {
-                candidates: [
-                  ...(a.body.candidates ?? []),
-                  ...(b.body.candidates ?? []),
-                  ...(c.body.candidates ?? []),
-                ],
+                candidates: [...(a.body.candidates ?? []), ...(b.body.candidates ?? []), ...(c.body.candidates ?? [])],
               },
               null,
               2,
@@ -182,9 +175,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     case "list_data_source_failures": {
       const result = await api("/api/overview");
-      const failures = (result.body.dataSourceHealth ?? []).filter(
-        (h: { status: string }) => h.status !== "OK",
-      );
+      const failures = (result.body.dataSourceHealth ?? []).filter((h: { status: string }) => h.status !== "OK");
       return { content: [{ type: "text", text: JSON.stringify({ failures }, null, 2) }] };
     }
     case "rerun_candidate_analysis": {

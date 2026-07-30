@@ -18,16 +18,16 @@ No trusted AliExpress MCP exists. Prefer **AliExpress Open Platform Affiliate AP
 
 ### Fields needed for qualification
 
-| Field | Required for rules | Expected via Affiliate | Notes |
-|-------|--------------------|------------------------|-------|
-| Title / product ID / URL | Yes | Usually | Confirm live |
-| Price (sale) | Yes | Usually | Currency via `target_currency` |
-| Shipping to destination | Yes for cost model | Partial | Verify `ship_to_country` effect |
-| Rating | Yes (≥4.7) | Often | If missing → NEEDS_MANUAL_VALIDATION |
-| Review count | Yes (≥20) | Often | Same |
-| Order / volume count | Yes (≥50) | Often (`last_volume` style fields) | Confirm mapping |
-| Variants | Preferred | Partial | Detail APIs may be needed |
-| Images | Dashboard | Usually | |
+| Field                    | Required for rules | Expected via Affiliate             | Notes                                |
+| ------------------------ | ------------------ | ---------------------------------- | ------------------------------------ |
+| Title / product ID / URL | Yes                | Usually                            | Confirm live                         |
+| Price (sale)             | Yes                | Usually                            | Currency via `target_currency`       |
+| Shipping to destination  | Yes for cost model | Partial                            | Verify `ship_to_country` effect      |
+| Rating                   | Yes (≥4.7)         | Often                              | If missing → NEEDS_MANUAL_VALIDATION |
+| Review count             | Yes (≥20)          | Often                              | Same                                 |
+| Order / volume count     | Yes (≥50)          | Often (`last_volume` style fields) | Confirm mapping                      |
+| Variants                 | Preferred          | Partial                            | Detail APIs may be needed            |
+| Images                   | Dashboard          | Usually                            |                                      |
 
 **Live probe status:** Blocked until credentials provided. Record results in this file after first successful call.
 
@@ -48,11 +48,11 @@ AliExpress Terms of Use prohibit systematic retrieval of Site Content (robots, s
 
 ## Provider strategy
 
-| Provider | MVP | Notes |
-|----------|-----|-------|
-| `AliExpressOfficialApiProvider` | Primary | Affiliate/Open Platform |
-| `AliExpressManualImportProvider` | Fallback | CSV / URL + user-supplied metrics |
-| `AliExpressPlaywrightProvider` | Deferred | Compliance-gated; inspection only in Phase 0–1 |
+| Provider                         | MVP      | Notes                                          |
+| -------------------------------- | -------- | ---------------------------------------------- |
+| `AliExpressOfficialApiProvider`  | Primary  | Affiliate/Open Platform                        |
+| `AliExpressManualImportProvider` | Fallback | CSV / URL + user-supplied metrics              |
+| `AliExpressPlaywrightProvider`   | Deferred | Compliance-gated; inspection only in Phase 0–1 |
 
 ## Recommendation
 

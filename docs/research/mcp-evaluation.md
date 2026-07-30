@@ -5,22 +5,22 @@
 
 ## Official eBay MCP — `@ebay/npm-public-api-mcp`
 
-| Item | Finding |
-|------|---------|
-| Repo | https://github.com/eBay/npm-public-api-mcp |
-| Package | `@ebay/npm-public-api-mcp` (pin e.g. `1.0.9`) |
-| Licence | Apache-2.0 |
-| Tools | `query_ebay_api`, `call_ebay_api` |
-| Prompt | `interpret_user_request` |
-| Auth | Client ID/Secret; application or user token modes |
-| Production REST | GET-only in production per README |
-| Sandbox | Not officially supported in current release |
-| Browse search | Yes, if OpenAPI includes Browse and credentials allow |
-| Item detail | Yes via Browse getItem |
-| Category/aspects | Via Taxonomy/Browse if specs loaded |
-| Sold history | **Only if Insights is callable** — MCP does not add capability |
-| Production use | **No** — prefer direct REST adapters |
-| Security | Privileged; holds API secrets; pin version; never commit env |
+| Item             | Finding                                                        |
+| ---------------- | -------------------------------------------------------------- |
+| Repo             | https://github.com/eBay/npm-public-api-mcp                     |
+| Package          | `@ebay/npm-public-api-mcp` (pin e.g. `1.0.9`)                  |
+| Licence          | Apache-2.0                                                     |
+| Tools            | `query_ebay_api`, `call_ebay_api`                              |
+| Prompt           | `interpret_user_request`                                       |
+| Auth             | Client ID/Secret; application or user token modes              |
+| Production REST  | GET-only in production per README                              |
+| Sandbox          | Not officially supported in current release                    |
+| Browse search    | Yes, if OpenAPI includes Browse and credentials allow          |
+| Item detail      | Yes via Browse getItem                                         |
+| Category/aspects | Via Taxonomy/Browse if specs loaded                            |
+| Sold history     | **Only if Insights is callable** — MCP does not add capability |
+| Production use   | **No** — prefer direct REST adapters                           |
+| Security         | Privileged; holds API secrets; pin version; never commit env   |
 
 ### Smoke checklist (after credentials)
 
@@ -52,11 +52,11 @@
 
 ## Google Sheets MCPs
 
-| Candidate | Role |
-|-----------|------|
-| isaacphi/mcp-gdrive | Drive + Sheets read/update — preferred for Cursor testing |
-| shionhonda/mcp-gsheet | Sheets-focused |
-| xing5/mcp-google-sheets | Sheets-focused |
+| Candidate               | Role                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| isaacphi/mcp-gdrive     | Drive + Sheets read/update — preferred for Cursor testing |
+| shionhonda/mcp-gsheet   | Sheets-focused                                            |
+| xing5/mcp-google-sheets | Sheets-focused                                            |
 
 Production export uses **official Google Sheets API**, not community MCP.
 

@@ -29,7 +29,14 @@ function parseJsonArray(raw: string): string[] {
   }
 }
 
-function toResponse(snapshot: { id: string; market: string; version: string; researchedAt: Date; sourcesJson: string; keywords: { id: string; rank: number; keyword: string; niche: string; momentum: string; sourcesJson: string; why: string }[] }): TrendLibraryResponse {
+function toResponse(snapshot: {
+  id: string;
+  market: string;
+  version: string;
+  researchedAt: Date;
+  sourcesJson: string;
+  keywords: { id: string; rank: number; keyword: string; niche: string; momentum: string; sourcesJson: string; why: string }[];
+}): TrendLibraryResponse {
   return {
     market: snapshot.market,
     version: snapshot.version,

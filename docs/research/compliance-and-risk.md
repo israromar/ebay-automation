@@ -43,10 +43,10 @@ Treat every MCP as privileged code:
 
 ## Risk register
 
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| Sold history unavailable | High | Manual validation; Insights request; no false APPROVED |
-| Affiliate API field gaps | Medium | Manual import; NEEDS_MANUAL_VALIDATION |
-| Scraping ToS violation | High | Do not ship scrapers as default |
-| Credential leak via MCP/logs | High | Pin MCP, redact logs, secrets outside repo |
-| Rate limit exhaustion | Medium | Queue, backoff, domain limits, cache |
+| Risk                         | Severity | Mitigation                                             |
+| ---------------------------- | -------- | ------------------------------------------------------ |
+| Sold history unavailable     | High     | Manual validation; Insights request; no false APPROVED |
+| Affiliate API field gaps     | Medium   | Manual import; NEEDS_MANUAL_VALIDATION                 |
+| Scraping ToS violation       | High     | Do not ship scrapers as default                        |
+| Credential leak via MCP/logs | High     | Pin MCP, redact logs, secrets outside repo             |
+| Rate limit exhaustion        | Medium   | Queue, backoff, domain limits, cache                   |

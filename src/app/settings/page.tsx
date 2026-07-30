@@ -58,9 +58,7 @@ export default function SettingsPage() {
               step={f.step}
               onChange={(e) => {
                 const raw = e.target.value;
-                const numeric = ["currency", "ebayMarketplace", "shipToCountry", "scheduleCron", "googleSpreadsheetId"].includes(
-                  f.key,
-                )
+                const numeric = ["currency", "ebayMarketplace", "shipToCountry", "scheduleCron", "googleSpreadsheetId"].includes(f.key)
                   ? raw
                   : Number(raw);
                 setSettings({ ...settings, [f.key]: numeric });
@@ -77,11 +75,7 @@ export default function SettingsPage() {
           Auto-export on approval
         </label>
       </div>
-      <button
-        type="button"
-        onClick={save}
-        className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white"
-      >
+      <button type="button" onClick={save} className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white">
         Save settings
       </button>
       {msg ? <p className="text-sm text-teal-800">{msg}</p> : null}

@@ -26,7 +26,11 @@ function cleanParams(params: GatewayParams): Record<string, string> {
 }
 
 /** TOP-style MD5 bookend signature used by Affiliate APIs. */
-export function signAliExpressParams(params: Record<string, string>, appSecret: string, signMethod: "md5" | "hmac" | "sha256" = "md5"): string {
+export function signAliExpressParams(
+  params: Record<string, string>,
+  appSecret: string,
+  signMethod: "md5" | "hmac" | "sha256" = "md5",
+): string {
   const sortedKeys = Object.keys(params).sort();
   const concatenated = sortedKeys.map((k) => `${k}${params[k]}`).join("");
 
@@ -52,21 +56,24 @@ function mapProduct(raw: Record<string, unknown>, source: string): AliExpressPro
   const title = String(raw.product_title ?? raw.productTitle ?? raw.title ?? "Untitled");
   const price = raw.target_sale_price ?? raw.sale_price ?? raw.target_original_price ?? raw.original_price ?? 0;
   const ratingRaw = raw.evaluate_rate ?? raw.evaluateRate ?? raw.product_rating ?? raw.rating;
-  const rating = ratingRaw == null ? undefined : Number(String(ratingRaw).replace("%", "")) > 5 ? Number(String(ratingRaw).replace("%", "")) / 20 : Number(ratingRaw);
+  const rating =
+    ratingRaw == null
+      ? undefined
+      : Number(String(ratingRaw).replace("%", "")) > 5
+        ? Number(String(ratingRaw).replace("%", "")) / 20
+        : Number(ratingRaw);
   const reviewCount = raw.evaluation_count ?? raw.evaluationCount ?? raw.review_count;
   const orderCount = raw.lastest_volume ?? raw.latest_volume ?? raw.volume ?? raw.order_count;
-  const url = String(raw.promotion_link ?? raw.product_detail_url ?? raw.detail_url ?? "") || (productId ? `https://www.aliexpress.com/item/${productId}.html` : "");
-  const smallImages = Array.isArray(raw.product_small_image_urls)
-    ? raw.product_small_image_urls
-    : [];
+  const url =
+    String(raw.promotion_link ?? raw.product_detail_url ?? raw.detail_url ?? "") ||
+    (productId ? `https://www.aliexpress.com/item/${productId}.html` : "");
+  const smallImages = Array.isArray(raw.product_small_image_urls) ? raw.product_small_image_urls : [];
 
   return {
     productId,
     title,
     url,
-    imageUrl:
-      String(raw.product_main_image_url ?? smallImages[0] ?? raw.image_url ?? "") ||
-      undefined,
+    imageUrl: String(raw.product_main_image_url ?? smallImages[0] ?? raw.image_url ?? "") || undefined,
     priceMinor: toMinorUnits(price),
     shippingMinor: undefined,
     currency: String(raw.target_sale_price_currency ?? raw.currency ?? "USD"),
@@ -87,7 +94,10 @@ function mapProduct(raw: Record<string, unknown>, source: string): AliExpressPro
 function extractProducts(payload: unknown): Record<string, unknown>[] {
   if (!payload || typeof payload !== "object") return [];
   const root = payload as Record<string, unknown>;
-  const response = (root.aliexpress_affiliate_product_query_response as Record<string, unknown> | undefined) ?? (root.aliexpress_affiliate_productdetail_get_response as Record<string, unknown> | undefined) ?? root;
+  const response =
+    (root.aliexpress_affiliate_product_query_response as Record<string, unknown> | undefined) ??
+    (root.aliexpress_affiliate_productdetail_get_response as Record<string, unknown> | undefined) ??
+    root;
 
   const respResult = (response.resp_result as Record<string, unknown> | undefined) ?? response;
   const result = (respResult.result as Record<string, unknown> | undefined) ?? respResult;
@@ -155,7 +165,8 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       ship_to_country: input.shipToCountry ?? "US",
       tracking_id: this.config.trackingId ?? "default",
       sort: "LAST_VOLUME_DESC",
-      fields: "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
+      fields:
+        "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
     });
     return extractProducts(body).map((product) => mapProduct(product, this.name));
   }
@@ -172,7 +183,8 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       target_language: "EN",
       ship_to_country: "US",
       tracking_id: this.config.trackingId ?? "default",
-      fields: "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
+      fields:
+        "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
     });
 
     const products = extractProducts(body).map((p) => mapProduct(p, this.name));

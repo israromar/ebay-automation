@@ -11,11 +11,11 @@ Public eBay REST APIs support active listing search and item detail. Verified so
 
 ### Browse API (confirmed)
 
-| Endpoint | Use |
-|----------|-----|
-| `GET /buy/browse/v1/item_summary/search` | Keyword search of active listings |
-| `GET /buy/browse/v1/item/{item_id}` | Item detail (price, seller, shipping, condition) |
-| `GET /buy/browse/v1/item/get_items` | Bulk item detail |
+| Endpoint                                 | Use                                              |
+| ---------------------------------------- | ------------------------------------------------ |
+| `GET /buy/browse/v1/item_summary/search` | Keyword search of active listings                |
+| `GET /buy/browse/v1/item/{item_id}`      | Item detail (price, seller, shipping, condition) |
+| `GET /buy/browse/v1/item/get_items`      | Bulk item detail                                 |
 
 **Auth:** OAuth 2.0 client credentials (application token) for public data.  
 **Sandbox:** Supported for Browse; verify scopes in developer console.  
@@ -37,7 +37,7 @@ Public eBay REST APIs support active listing search and item detail. Verified so
 
 ### Sell APIs
 
-- Inventory, orders, marketing for *our* seller account
+- Inventory, orders, marketing for _our_ seller account
 - Not a source of competitor sold history
 - Useful later for listing automation (out of MVP)
 
@@ -53,10 +53,10 @@ Public eBay REST APIs support active listing search and item detail. Verified so
 
 ## Authentication
 
-| Mode | When |
-|------|------|
-| Application token (client credentials) | Public Browse search/detail |
-| User token (auth code + refresh) | Sell APIs / private seller data |
+| Mode                                   | When                            |
+| -------------------------------------- | ------------------------------- |
+| Application token (client credentials) | Public Browse search/detail     |
+| User token (auth code + refresh)       | Sell APIs / private seller data |
 
 Scopes: start with `https://api.ebay.com/oauth/api_scope` for Browse; add Buy/Sell scopes only as needed.
 
@@ -68,14 +68,14 @@ Scopes: start with `https://api.ebay.com/oauth/api_scope` for Browse; add Buy/Se
 
 ## Decision table
 
-| Data requirement | Official API | Browser extraction | Extension import | Third-party provider | Manual fallback |
-| --- | --- | --- | --- | --- | --- |
-| Current listing price | Yes — Browse | Fragile / ToS risk | Possible | Usually yes | Yes |
-| Product URL | Yes — Browse | Yes | Yes | Yes | Yes |
-| Seller information | Partial — Browse | Yes | Yes | Often | Yes |
-| Sold in last 30 days | No unless Insights | ToS/risk | Possible | Often (licence TBD) | Yes |
-| Completed sales price | No unless Insights | ToS/risk | Possible | Often | Yes |
-| Listing competition | Partial — result counts | Yes | Possible | Often | Yes |
+| Data requirement      | Official API            | Browser extraction | Extension import | Third-party provider | Manual fallback |
+| --------------------- | ----------------------- | ------------------ | ---------------- | -------------------- | --------------- |
+| Current listing price | Yes — Browse            | Fragile / ToS risk | Possible         | Usually yes          | Yes             |
+| Product URL           | Yes — Browse            | Yes                | Yes              | Yes                  | Yes             |
+| Seller information    | Partial — Browse        | Yes                | Yes              | Often                | Yes             |
+| Sold in last 30 days  | No unless Insights      | ToS/risk           | Possible         | Often (licence TBD)  | Yes             |
+| Completed sales price | No unless Insights      | ToS/risk           | Possible         | Often                | Yes             |
+| Listing competition   | Partial — result counts | Yes                | Possible         | Often                | Yes             |
 
 ## Production recommendation
 
