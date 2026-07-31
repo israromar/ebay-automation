@@ -1,5 +1,22 @@
 /** Build operator-facing eBay sold-history / completed-sales URLs. */
 
+/** Prefer for Browse getItem — keeps legacy `v1|…` item ids when present. */
+export function extractEbayItemId(urlOrId: string): string | null {
+  const trimmed = urlOrId.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed) || /^v1\|/.test(trimmed)) return trimmed;
+  const fromPath = trimmed.match(/\/itm\/(?:[^/]+\/)?(\d{9,15})/i);
+  if (fromPath) return fromPath[1];
+  try {
+    const u = new URL(trimmed);
+    const id = u.searchParams.get("item") ?? u.searchParams.get("id");
+    if (id) return id;
+  } catch {
+    /* not a URL */
+  }
+  return null;
+}
+
 export function extractNumericEbayItemId(itemIdOrUrl?: string | null): string | null {
   if (!itemIdOrUrl) return null;
   const trimmed = itemIdOrUrl.trim();

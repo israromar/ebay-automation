@@ -17,6 +17,7 @@ import {
   HelpCircle,
   PanelLeftClose,
   PanelLeft,
+  Gauge,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ const nav = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/automation", label: "Automation", icon: Bot },
   { href: "/research", label: "Research", icon: Search },
+  { href: "/analyzer", label: "Analyzer", icon: Gauge },
   { href: "/candidates", label: "Candidates", icon: Package },
   { href: "/scans", label: "Scans", icon: Radar },
   { href: "/schedules", label: "Schedules", icon: CalendarClock },

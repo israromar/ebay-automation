@@ -14,18 +14,17 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 type GlobalLoaderContextValue = {
-  /** Imperative: bump busy count (pair with end). */
   begin: (label?: string) => void;
   end: () => void;
-  /** Run an async fn under the overlay. */
   track: <T>(promise: Promise<T>, label?: string) => Promise<T>;
   busy: boolean;
 };
 
 const GlobalLoaderContext = createContext<GlobalLoaderContextValue | null>(null);
 
-const SHOW_DELAY_MS = 180;
-const MIN_VISIBLE_MS = 320;
+const SHOW_DELAY_MS = 220;
+const MIN_VISIBLE_MS = 280;
+const ROUTE_MAX_MS = 4000;
 
 function headerSaysSilent(init?: RequestInit, input?: RequestInfo | URL): boolean {
   const fromInit = init?.headers;
@@ -87,27 +86,37 @@ function isInternalNavAnchor(anchor: HTMLAnchorElement): boolean {
 export function GlobalLoaderProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [count, setCount] = useState(0);
+  const [fetchCount, setFetchCount] = useState(0);
+  const [routePending, setRoutePending] = useState(false);
   const [label, setLabel] = useState("Loading");
   const [visible, setVisible] = useState(false);
-  const labelStack = useRef<string[]>([]);
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shownAt = useRef(0);
-  const routeBusy = useRef(false);
+  const labelStack = useRef<string[]>([]);
+
+  const busy = routePending || fetchCount > 0;
+
+  const clearRoutePending = useCallback(() => {
+    if (routeTimer.current) {
+      clearTimeout(routeTimer.current);
+      routeTimer.current = null;
+    }
+    setRoutePending(false);
+  }, []);
 
   const begin = useCallback((nextLabel = "Loading") => {
     labelStack.current.push(nextLabel);
     setLabel(nextLabel);
-    setCount((c) => c + 1);
+    setFetchCount((c) => c + 1);
   }, []);
 
   const end = useCallback(() => {
     labelStack.current.pop();
-    setLabel(labelStack.current[labelStack.current.length - 1] ?? "Loading");
-    setCount((c) => Math.max(0, c - 1));
-  }, []);
+    setLabel(labelStack.current[labelStack.current.length - 1] ?? (routePending ? "Opening page" : "Loading"));
+    setFetchCount((c) => Math.max(0, c - 1));
+  }, [routePending]);
 
   const track = useCallback(
     async <T,>(promise: Promise<T>, nextLabel?: string) => {
@@ -121,9 +130,19 @@ export function GlobalLoaderProvider({ children }: { children: ReactNode }) {
     [begin, end],
   );
 
-  // Debounced show / min-visible hide so fast requests don't flicker.
+  const startRoute = useCallback(() => {
+    setLabel("Opening page");
+    setRoutePending(true);
+    if (routeTimer.current) clearTimeout(routeTimer.current);
+    routeTimer.current = setTimeout(() => {
+      routeTimer.current = null;
+      setRoutePending(false);
+    }, ROUTE_MAX_MS);
+  }, []);
+
+  // Debounced visibility
   useEffect(() => {
-    if (count > 0) {
+    if (busy) {
       if (hideTimer.current) {
         clearTimeout(hideTimer.current);
         hideTimer.current = null;
@@ -149,48 +168,48 @@ export function GlobalLoaderProvider({ children }: { children: ReactNode }) {
     hideTimer.current = setTimeout(() => {
       hideTimer.current = null;
       setVisible(false);
+      setLabel("Loading");
     }, wait);
 
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [count, visible]);
+  }, [busy, visible]);
 
-  // Route transitions (sidebar / Link clicks).
+  // Sidebar / Link clicks — non-blocking top bar only for routes.
   useEffect(() => {
-    function onPointerDown(event: MouseEvent) {
+    function onClick(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = (event.target as Element | null)?.closest?.("a");
       if (!anchor || !(anchor instanceof HTMLAnchorElement)) return;
       if (!isInternalNavAnchor(anchor)) return;
-      if (routeBusy.current) return;
-      routeBusy.current = true;
-      begin("Opening page");
-      if (routeTimer.current) clearTimeout(routeTimer.current);
-      routeTimer.current = setTimeout(() => {
-        if (!routeBusy.current) return;
-        routeBusy.current = false;
-        end();
-      }, 10000);
+      startRoute();
     }
 
-    document.addEventListener("click", onPointerDown, true);
-    return () => document.removeEventListener("click", onPointerDown, true);
-  }, [begin, end]);
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [startRoute]);
 
   const routeKey = `${pathname}?${searchParams?.toString() ?? ""}`;
   useEffect(() => {
-    if (!routeBusy.current) return;
-    routeBusy.current = false;
-    if (routeTimer.current) {
-      clearTimeout(routeTimer.current);
-      routeTimer.current = null;
-    }
-    end();
-  }, [routeKey, end]);
+    clearRoutePending();
+  }, [routeKey, clearRoutePending]);
 
-  // Auto-cover same-origin /api fetches app-wide.
+  // Escape dismisses a stuck indicator.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      clearRoutePending();
+      labelStack.current = [];
+      setFetchCount(0);
+      setVisible(false);
+      setLabel("Loading");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [clearRoutePending]);
+
   useEffect(() => {
     const original = window.fetch.bind(window);
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -213,15 +232,17 @@ export function GlobalLoaderProvider({ children }: { children: ReactNode }) {
       begin,
       end,
       track,
-      busy: count > 0,
+      busy,
     }),
-    [begin, end, track, count],
+    [begin, end, track, busy],
   );
+
+  const displayLabel = routePending ? "Opening page" : label;
 
   return (
     <GlobalLoaderContext.Provider value={value}>
       {children}
-      <GlobalLoaderOverlay visible={visible} label={label} />
+      <GlobalLoaderChrome visible={visible} label={displayLabel} routeOnly={routePending && fetchCount === 0} />
     </GlobalLoaderContext.Provider>
   );
 }
@@ -239,46 +260,68 @@ export function useGlobalLoader() {
   return ctx;
 }
 
-function GlobalLoaderOverlay({ visible, label }: { visible: boolean; label: string }) {
+/**
+ * Never captures clicks — sidebar and page stay usable.
+ * Route-only: slim top bar. Data fetches: soft card + top bar.
+ */
+function GlobalLoaderChrome({
+  visible,
+  label,
+  routeOnly,
+}: {
+  visible: boolean;
+  label: string;
+  routeOnly: boolean;
+}) {
   return (
-    <div
-      aria-live="polite"
-      aria-busy={visible}
-      className={cn(
-        "fixed inset-0 z-[200] flex items-center justify-center transition-opacity duration-200",
-        visible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-      )}
-    >
+    <>
       <div
+        aria-hidden={!visible}
         className={cn(
-          "absolute inset-0 bg-[#0b1f4d]/25 backdrop-blur-[2px] transition-opacity duration-300",
+          "pointer-events-none fixed top-0 right-0 left-0 z-[210] h-0.5 overflow-hidden bg-transparent transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0",
         )}
-      />
-      <div
-        className={cn(
-          "relative flex min-w-[200px] flex-col items-center gap-4 rounded-2xl border border-white/40 bg-white/95 px-8 py-7 shadow-2xl shadow-[#0b1f4d]/20 ring-1 ring-black/5",
-          "transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-          visible ? "translate-y-0 scale-100" : "translate-y-2 scale-95",
-        )}
-        role="status"
       >
-        <div className="relative size-12">
-          <span className="absolute inset-0 rounded-full border-2 border-[#dbe1ff]" />
-          <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-primary border-r-primary/40" />
-          <span className="absolute inset-2 animate-pulse rounded-full bg-primary/10" />
-          <span className="absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary" />
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-foreground">{label}</p>
-          <p className="mt-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Pulse Analytics</p>
-        </div>
-        <div className="flex w-28 gap-1">
-          <span className="h-1 flex-1 animate-[pulse_1.1s_ease-in-out_infinite] rounded-full bg-primary/80" />
-          <span className="h-1 flex-1 animate-[pulse_1.1s_ease-in-out_0.2s_infinite] rounded-full bg-primary/50" />
-          <span className="h-1 flex-1 animate-[pulse_1.1s_ease-in-out_0.4s_infinite] rounded-full bg-primary/30" />
-        </div>
+        <div className="h-full w-1/3 animate-[pulse-slide_1.1s_ease-in-out_infinite] rounded-r-full bg-primary shadow-[0_0_12px_rgba(37,99,235,0.65)]" />
       </div>
-    </div>
+
+      {!routeOnly ? (
+        <div
+          aria-live="polite"
+          aria-busy={visible}
+          className={cn(
+            "pointer-events-none fixed inset-0 z-[200] flex items-center justify-center transition-opacity duration-200",
+            visible ? "opacity-100" : "opacity-0",
+          )}
+        >
+          <div
+            className={cn(
+              "absolute inset-0 bg-[#0b1f4d]/15 backdrop-blur-[1px] transition-opacity duration-300",
+              visible ? "opacity-100" : "opacity-0",
+            )}
+          />
+          <div
+            className={cn(
+              "relative flex min-w-[200px] flex-col items-center gap-4 rounded-2xl border border-white/40 bg-white/95 px-8 py-7 shadow-2xl shadow-[#0b1f4d]/15 ring-1 ring-black/5",
+              "transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              visible ? "translate-y-0 scale-100" : "translate-y-2 scale-95",
+            )}
+            role="status"
+          >
+            <div className="relative size-12">
+              <span className="absolute inset-0 rounded-full border-2 border-[#dbe1ff]" />
+              <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-primary border-r-primary/40" />
+              <span className="absolute inset-2 animate-pulse rounded-full bg-primary/10" />
+              <span className="absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold tracking-tight text-foreground">{label}</p>
+              <p className="mt-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Pulse Analytics</p>
+              <p className="mt-2 text-[10px] text-muted-foreground">Press Esc to dismiss</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

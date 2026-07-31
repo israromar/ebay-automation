@@ -102,6 +102,18 @@ async function resolveHandler(path: string[], method: Method): Promise<Handler |
     const m = await import("@/lib/api-handlers/research-trends-refresh");
     return m.POST as Handler;
   }
+  if (p === "analyzer/inspect" && method === "POST") {
+    const m = await import("@/lib/api-handlers/analyzer-inspect");
+    return m.POST as Handler;
+  }
+  if (p === "analyzer/market" && method === "GET") {
+    const m = await import("@/lib/api-handlers/analyzer-market");
+    return m.GET as Handler;
+  }
+  if (p === "analyzer/match" && method === "POST") {
+    const m = await import("@/lib/api-handlers/analyzer-match");
+    return m.POST as Handler;
+  }
   if (p === "automation/runs" && method === "GET") {
     const m = await import("@/lib/api-handlers/automation-runs");
     return m.GET as Handler;
