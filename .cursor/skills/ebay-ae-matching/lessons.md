@@ -42,15 +42,19 @@ Concrete failures from production debugging. Prefer the checklist in `SKILL.md`;
 
 **Causes:**
 
-- `requireVisual: true` while ORT WASM could not load under Next (`ort-wasm-simd-threaded.mjs` path).
-- Unavailable visual treated like failed visual match → empty shortlist.
+- Intel macOS: `onnxruntime-node` does not ship `darwin/x64`, so native ORT always fails.
+- Under Next, ORT WASM then looks for `ort-wasm-simd-threaded.mjs` in `process.cwd()` because it cannot determine `import.meta.url` for `ort.node.min.mjs`.
+- `requireVisual: true` while visual scores are unavailable → empty shortlist / everything Needs review.
 
 **Fix pattern:**
 
+- Bootstrap ORT early via `instrumentation.ts` + `NODE_OPTIONS --import register-ort-loader.mjs`.
+- When native binding is missing, redirect `onnxruntime-node` → `onnxruntime-web`, set absolute `{ mjs, wasm }` `wasmPaths`, and symlink WASM assets into cwd as a Next fallback.
 - Set `requireVisual` only when `visualAvailableCount > 0`.
 - Log `visual_match_unavailable` with provider reason.
 - Keep semantic hard-rejects independent of vision.
 - DINOv2 image input must be `Blob`, not raw `Uint8Array`.
+- Verify with `npm run visual:probe`.
 
 ## 4. Accessory / semantic false positives
 
@@ -99,6 +103,7 @@ Concrete failures from production debugging. Prefer the checklist in `SKILL.md`;
 - DINOv2 ranked an over-door device first at 69 visual score; the selected pillow belonged to a different physical-use context.
 - Exact-looking hanging suppliers did not pass every configured supplier threshold.
 - Official `aliexpress.affiliate.image.search` accepted the signed multipart request but returned `InsufficientPermission` for the current app key.
+- Advanced Affiliates API (smart match + hot products) is a **separate** grant from image search; Advanced Active does not unlock figure search.
 
 **Fix pattern:**
 
@@ -106,6 +111,7 @@ Concrete failures from production debugging. Prefer the checklist in `SKILL.md`;
 - Prefer form-factor query variants (`over door neck stretcher`) and boost shared form-factor matches.
 - Support official image search with a ≤100KB JPEG and union image hits with keyword hits before ranking.
 - Keep image search disabled until AliExpress grants the app permission; never scrape the consumer image-search UI as a production substitute.
+- When Advanced is Active, union `hotproduct.query` / `product.smartmatch` with `product.query` under hard match gates.
 - Persist whether an alternative came from keyword or image retrieval, and show alternatives even when a source is attached.
 
 ## 8. Missing AE shipping treated as free

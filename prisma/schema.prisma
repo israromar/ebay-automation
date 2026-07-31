@@ -407,3 +407,80 @@ model ScheduleConfig {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+/** One-button autonomous research pipeline run. */
+model AutomationRun {
+  id                 String                @id @default(cuid())
+  workspaceId        String?
+  status             String                @default("PENDING")
+  configJson         String
+  capabilitiesJson   String?
+  progressJson       String?
+  summaryJson        String?
+  error              String?
+  trendRunId         String?
+  scanId             String?
+  exportResultJson   String?
+  startedAt          DateTime              @default(now())
+  finishedAt         DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  stages             AutomationStageRun[]
+  artifacts          AutomationArtifact[]
+  decisions          AutomationDecision[]
+
+  @@index([status, createdAt])
+}
+
+model AutomationStageRun {
+  id              String        @id @default(cuid())
+  runId           String
+  run             AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stage           String
+  position        Int           @default(0)
+  status          String        @default("PENDING")
+  attempt         Int           @default(0)
+  maxAttempts     Int           @default(3)
+  progressCurrent Int           @default(0)
+  progressTotal   Int           @default(0)
+  inputJson       String?
+  outputJson      String?
+  error           String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([runId, position])
+  @@index([runId, stage])
+  @@index([status])
+}
+
+model AutomationArtifact {
+  id          String        @id @default(cuid())
+  runId       String
+  run         AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stage       String?
+  kind        String
+  payloadJson String
+  createdAt   DateTime      @default(now())
+
+  @@index([runId, kind])
+}
+
+model AutomationDecision {
+  id           String        @id @default(cuid())
+  runId        String
+  run          AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  candidateId  String?
+  ideaId       String?
+  outcome      String
+  reasonsJson  String?
+  evidenceJson String?
+  selected     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([runId, outcome])
+  @@index([candidateId])
+}

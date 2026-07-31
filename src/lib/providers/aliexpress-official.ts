@@ -1,7 +1,12 @@
 import { createHash, createHmac } from "crypto";
 import sharp from "sharp";
 import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
-import type { AliExpressImageSearchInput, AliExpressProvider } from "./types";
+import type {
+  AliExpressHotProductInput,
+  AliExpressImageSearchInput,
+  AliExpressProvider,
+  AliExpressSmartMatchInput,
+} from "./types";
 
 type GatewayParams = Record<string, string | number | boolean | undefined | null>;
 
@@ -97,6 +102,8 @@ function extractProducts(payload: unknown): Record<string, unknown>[] {
   const root = payload as Record<string, unknown>;
   const response =
     (root.aliexpress_affiliate_product_query_response as Record<string, unknown> | undefined) ??
+    (root.aliexpress_affiliate_product_smartmatch_response as Record<string, unknown> | undefined) ??
+    (root.aliexpress_affiliate_hotproduct_query_response as Record<string, unknown> | undefined) ??
     (root.aliexpress_affiliate_image_search_response as Record<string, unknown> | undefined) ??
     (root.aliexpress_affiliate_productdetail_get_response as Record<string, unknown> | undefined) ??
     root;
@@ -220,6 +227,70 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       mapped.meta.warnings.push("retrieved_by_image");
       return mapped;
     });
+  }
+
+  /** Advanced API: keyword / product_id smart recommendations. */
+  async searchSmartMatch(input: AliExpressSmartMatchInput): Promise<AliExpressProduct[]> {
+    if (!this.config.appKey || !this.config.appSecret) {
+      throw new Error("AliExpressOfficialApiProvider: missing credentials");
+    }
+    if (!input.keywords && !input.productId) {
+      throw new Error("AliExpress smartmatch requires keywords or productId");
+    }
+
+    const body = await this.call("aliexpress.affiliate.product.smartmatch", {
+      keywords: input.keywords,
+      product_id: input.productId,
+      device_id: input.deviceId ?? "ebay-automation",
+      country: input.shipToCountry ?? "US",
+      page_no: 1,
+      target_currency: input.currency ?? "USD",
+      target_language: "EN",
+      tracking_id: this.config.trackingId ?? "default",
+      app: "ebay-automation",
+      app_signature: this.config.appSignature ?? this.config.trackingId ?? "default",
+      fields:
+        "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
+    });
+
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
+    return extractProducts(body)
+      .slice(0, limit)
+      .map((product) => {
+        const mapped = mapProduct(product, `${this.name}:smartmatch`);
+        mapped.meta.warnings.push("retrieved_by_smartmatch");
+        return mapped;
+      });
+  }
+
+  /** Advanced API: affiliate hot / high-commission products. */
+  async searchHotProducts(input: AliExpressHotProductInput): Promise<AliExpressProduct[]> {
+    if (!this.config.appKey || !this.config.appSecret) {
+      throw new Error("AliExpressOfficialApiProvider: missing credentials");
+    }
+
+    const requested = Math.min(Math.max(input.limit ?? 20, 1), 50);
+    const body = await this.call("aliexpress.affiliate.hotproduct.query", {
+      keywords: input.keyword,
+      category_ids: input.categoryIds,
+      page_no: 1,
+      page_size: requested,
+      target_currency: input.currency ?? "USD",
+      target_language: "EN",
+      ship_to_country: input.shipToCountry ?? "US",
+      tracking_id: this.config.trackingId ?? "default",
+      sort: "LAST_VOLUME_DESC",
+      fields:
+        "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
+    });
+
+    return extractProducts(body)
+      .slice(0, requested)
+      .map((product) => {
+        const mapped = mapProduct(product, `${this.name}:hotproduct`);
+        mapped.meta.warnings.push("retrieved_by_hotproduct");
+        return mapped;
+      });
   }
 
   private async searchProductPage(input: ProductSearchInput, page: number, pageSize: number): Promise<AliExpressProduct[]> {

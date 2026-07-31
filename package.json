@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_OPTIONS='--import ./src/lib/providers/register-ort-loader.mjs' next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_OPTIONS='--import ./src/lib/providers/register-ort-loader.mjs' next start",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -14,10 +14,12 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "poc": "tsx scripts/poc-run.ts",
+    "poc": "NODE_OPTIONS='--import ./src/lib/providers/register-ort-loader.mjs' tsx scripts/poc-run.ts",
     "aliexpress:probe": "tsx scripts/aliexpress-probe.ts",
+    "aliexpress:advanced-probe": "tsx scripts/aliexpress-advanced-probe.ts",
     "mcp": "tsx mcp/server.ts",
-    "worker:tick": "tsx scripts/scheduler-tick.ts"
+    "worker:tick": "NODE_OPTIONS='--import ./src/lib/providers/register-ort-loader.mjs' tsx scripts/scheduler-tick.ts",
+    "visual:probe": "NODE_OPTIONS='--import ./src/lib/providers/register-ort-loader.mjs' tsx scripts/probe-visual-match.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -28,6 +30,7 @@
     "nanoid": "^6.0.0",
     "next": "15.5.21",
     "onnxruntime-node": "^1.24.3",
+    "onnxruntime-web": "1.26.0-dev.20260416-b7804b056c",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "sharp": "^0.35.3",

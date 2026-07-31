@@ -997,6 +997,43 @@ export class ScanOrchestrator {
         limit: 75,
       });
       for (const product of results) products.set(product.productId, product);
+
+      if (process.env.ALIEXPRESS_HOTPRODUCT_ENABLED !== "false" && this.deps.aliexpress.searchHotProducts) {
+        try {
+          const hot = await this.deps.aliexpress.searchHotProducts({
+            keyword: query,
+            limit: 25,
+            shipToCountry: "US",
+            currency: "USD",
+          });
+          for (const product of hot) products.set(product.productId, product);
+        } catch (error) {
+          logWarn("aliexpress_hotproduct_unavailable", {
+            query,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    if (process.env.ALIEXPRESS_SMARTMATCH_ENABLED !== "false" && this.deps.aliexpress.searchSmartMatch) {
+      const smartQueries = [queries[0], keyword].filter((q): q is string => Boolean(q));
+      for (const smartQuery of [...new Set(smartQueries)]) {
+        try {
+          const smart = await this.deps.aliexpress.searchSmartMatch({
+            keywords: smartQuery,
+            limit: 20,
+            shipToCountry: "US",
+            currency: "USD",
+          });
+          for (const product of smart) products.set(product.productId, product);
+        } catch (error) {
+          logWarn("aliexpress_smartmatch_unavailable", {
+            query: smartQuery,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     return {
@@ -1142,7 +1179,7 @@ export class ScanOrchestrator {
     return updated;
   }
 
-  async exportApproved(exporter: SpreadsheetExporter) {
+  async exportApproved(exporter: SpreadsheetExporter, options?: { candidateIds?: string[] }) {
     const approved = await prisma.productCandidate.findMany({
       where: {
         status: { in: ["APPROVED", "EXPORT_PENDING"] },
@@ -1150,6 +1187,7 @@ export class ScanOrchestrator {
         aliexpressUrl: { not: null },
         aliexpressPriceMinor: { not: null },
         aliexpressShippingMinor: { not: null },
+        ...(options?.candidateIds?.length ? { id: { in: options.candidateIds } } : {}),
       },
     });
     const rows: ExportCandidateRow[] = approved.map((c) => ({
