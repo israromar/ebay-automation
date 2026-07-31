@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 const MAX_KEYWORDS = 10;
 const RESEARCH_STATE_KEY = "ebay-automation:research-state:v2";
@@ -110,7 +112,7 @@ function MatchResultImage({ src: imageUrl }: { src: string | null | undefined })
 
   if (!src) {
     return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400">No AE image</div>
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">No AE image</div>
     );
   }
 
@@ -158,6 +160,15 @@ function collectRecentKeywords(runs: TrendRun[]): string[] {
 }
 
 export default function ResearchPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading research…</p>}>
+      <ResearchPageInner />
+    </Suspense>
+  );
+}
+
+function ResearchPageInner() {
+  const searchParams = useSearchParams();
   const [keywords, setKeywords] = useState<string[]>(["portable blender", "led strip lights"]);
   const [draft, setDraft] = useState("");
   const draftRef = useRef<HTMLInputElement>(null);
@@ -294,6 +305,12 @@ export default function ResearchPage() {
         setHighQualityFilter(Boolean(saved.highQualityFilter));
       }
 
+      const seed = searchParams.get("seed")?.trim();
+      if (seed) {
+        setKeywords([seed]);
+        setDraft("");
+      }
+
       const loadedIdeas = await loadIdeas(runId || undefined, status || undefined);
       if (cancelled) return;
 
@@ -311,7 +328,7 @@ export default function ResearchPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadRuns, loadIdeas, loadTrendLibrary]);
+  }, [loadRuns, loadIdeas, loadTrendLibrary, searchParams]);
 
   useEffect(() => {
     if (!stateRestored) return;
@@ -504,41 +521,50 @@ export default function ResearchPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold">Trending research</h2>
-        <p className="mt-1 max-w-3xl text-sm text-slate-600">
-          Opportunity score uses active eBay listings and price spread for your keywords — not sold history. Select ideas, then find
-          AliExpress matches to create platform candidates.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Research</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Identify high-potential inventory with eBay Browse clustering. Opportunity score uses active listings and price
+            spread — not verified 30-day sold. Select ideas, then find AliExpress matches.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/candidates">
+            <button type="button" className="h-8 rounded-lg border border-input bg-card px-3 text-sm font-medium hover:bg-muted">
+              Open candidates
+            </button>
+          </Link>
+        </div>
       </div>
 
-      <form onSubmit={startResearch} className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+      <form onSubmit={startResearch} className="space-y-4 rounded-lg border border-border bg-card p-4">
         <div className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
-              <label htmlFor="keyword-draft" className="text-sm font-medium text-slate-700">
+              <label htmlFor="keyword-draft" className="text-sm font-medium text-foreground/80">
                 Seed keywords
               </label>
-              <p className="text-xs text-slate-500">Type and press Enter, paste a list, or tap a trending / recent keyword.</p>
+              <p className="text-xs text-muted-foreground">Type and press Enter, paste a list, or tap a trending / recent keyword.</p>
             </div>
-            <p className="text-xs tabular-nums text-slate-500">
+            <p className="text-xs tabular-nums text-muted-foreground">
               {keywords.length}/{MAX_KEYWORDS}
             </p>
           </div>
 
           <div
-            className="flex min-h-[3rem] cursor-text flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-white px-2.5 py-2 focus-within:border-teal-600 focus-within:ring-1 focus-within:ring-teal-600"
+            className="flex min-h-[3rem] cursor-text flex-wrap items-center gap-2 rounded-md border border-input bg-card px-2.5 py-2 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
             onClick={() => draftRef.current?.focus()}
           >
             {keywords.map((keyword, index) => (
               <span
                 key={`${keyword}-${index}`}
-                className="inline-flex max-w-full items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-sm text-teal-900"
+                className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent/50 px-2.5 py-1 text-sm text-primary"
               >
                 <span className="truncate">{keyword}</span>
                 <button
                   type="button"
-                  className="rounded-full px-1 text-teal-700 hover:bg-teal-100 hover:text-teal-950"
+                  className="rounded-full px-1 text-primary hover:bg-accent hover:text-accent-foreground"
                   aria-label={`Remove ${keyword}`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -557,7 +583,7 @@ export default function ResearchPage() {
               placeholder={
                 keywords.length === 0 ? "e.g. portable blender" : keywords.length >= MAX_KEYWORDS ? "Limit reached" : "Add another…"
               }
-              className="min-w-[10rem] flex-1 border-0 bg-transparent py-1 text-sm outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+              className="min-w-[10rem] flex-1 border-0 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
               onChange={(e) => setDraft(e.target.value)}
               onBlur={commitDraft}
               onPaste={(e) => {
@@ -586,7 +612,7 @@ export default function ResearchPage() {
             <div className="flex justify-end">
               <button
                 type="button"
-                className="rounded-full px-3 py-1 text-xs text-slate-500 hover:text-rose-700"
+                className="rounded-full px-3 py-1 text-xs text-muted-foreground hover:text-rose-700"
                 onClick={() => setKeywords([])}
               >
                 Clear all
@@ -594,11 +620,11 @@ export default function ResearchPage() {
             </div>
           )}
 
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+          <div className="overflow-hidden rounded-lg border border-border bg-muted">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
               <div>
-                <p className="text-sm font-medium text-slate-800">US trending library</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-medium text-foreground">US trending library</p>
+                <p className="text-xs text-muted-foreground">
                   {trendLibrary
                     ? `Top ${trendLibrary.keywords.length} · v${trendLibrary.version} · researched ${new Date(trendLibrary.researchedAt).toLocaleDateString()}`
                     : "Loading curated seeds…"}
@@ -608,16 +634,16 @@ export default function ResearchPage() {
                 type="button"
                 disabled={busy || trendsBusy}
                 onClick={() => void refreshTrendLibrary()}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-400 hover:text-teal-900 disabled:opacity-50"
+                className="rounded-md border border-input bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 hover:border-primary hover:text-primary disabled:opacity-50"
               >
                 {trendsBusy ? "Refreshing…" : "Refresh Trends"}
               </button>
             </div>
 
-            <div className="flex flex-wrap gap-1.5 border-b border-slate-200 px-3 py-2">
+            <div className="flex flex-wrap gap-1.5 border-b border-border px-3 py-2">
               <button
                 type="button"
-                className={`rounded-full px-2.5 py-1 text-xs ${trendNicheFilter === "" ? "bg-teal-700 text-white" : "bg-white text-slate-600 hover:bg-teal-50"}`}
+                className={`rounded-full px-2.5 py-1 text-xs ${trendNicheFilter === "" ? "bg-primary text-white" : "bg-card text-muted-foreground hover:bg-accent/50"}`}
                 onClick={() => setTrendNicheFilter("")}
               >
                 All niches
@@ -626,7 +652,7 @@ export default function ResearchPage() {
                 <button
                   key={niche}
                   type="button"
-                  className={`rounded-full px-2.5 py-1 text-xs ${trendNicheFilter === niche ? "bg-teal-700 text-white" : "bg-white text-slate-600 hover:bg-teal-50"}`}
+                  className={`rounded-full px-2.5 py-1 text-xs ${trendNicheFilter === niche ? "bg-primary text-white" : "bg-card text-muted-foreground hover:bg-accent/50"}`}
                   onClick={() => setTrendNicheFilter(niche)}
                 >
                   {niche}
@@ -636,28 +662,28 @@ export default function ResearchPage() {
 
             <div className="max-h-64 overflow-y-auto">
               {filteredTrendKeywords.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-slate-500">No trending keywords yet. Click Refresh Trends.</p>
+                <p className="px-3 py-4 text-sm text-muted-foreground">No trending keywords yet. Click Refresh Trends.</p>
               ) : (
                 <ul className="divide-y divide-slate-200">
                   {filteredTrendKeywords.map((entry) => {
                     const active = keywordSet.has(normalizeKeyword(entry.keyword));
                     return (
                       <li key={entry.id} className="flex items-start gap-3 px-3 py-2">
-                        <span className="w-6 shrink-0 pt-0.5 text-xs tabular-nums text-slate-400">#{entry.rank}</span>
+                        <span className="w-6 shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">#{entry.rank}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium text-slate-900">{entry.keyword}</span>
-                            <span className="rounded bg-white px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">
+                            <span className="text-sm font-medium text-foreground">{entry.keyword}</span>
+                            <span className="rounded bg-card px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                               {entry.niche}
                             </span>
-                            <span className="text-[10px] uppercase tracking-wide text-slate-400">{entry.momentum}</span>
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{entry.momentum}</span>
                           </div>
-                          <p className="mt-0.5 text-xs text-slate-500">{entry.why}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{entry.why}</p>
                         </div>
                         <button
                           type="button"
                           disabled={busy || active || keywords.length >= MAX_KEYWORDS}
-                          className={`shrink-0 rounded-md border px-2 py-1 text-xs ${active ? "border-teal-200 bg-teal-50 text-teal-800" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400 hover:text-teal-900"} disabled:opacity-50`}
+                          className={`shrink-0 rounded-md border px-2 py-1 text-xs ${active ? "border-accent bg-accent/50 text-primary" : "border-input bg-card text-foreground/80 hover:border-primary hover:text-primary"} disabled:opacity-50`}
                           onClick={() => addKeywords([entry.keyword])}
                           title={entry.sources.join(", ")}
                         >
@@ -673,7 +699,7 @@ export default function ResearchPage() {
 
           {recentKeywords.length > 0 && (
             <div>
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">Recent</p>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Recent</p>
               <div className="flex flex-wrap gap-1.5">
                 {recentKeywords.map((keyword) => {
                   const active = keywordSet.has(normalizeKeyword(keyword));
@@ -682,7 +708,7 @@ export default function ResearchPage() {
                       key={keyword}
                       type="button"
                       disabled={busy || active || keywords.length >= MAX_KEYWORDS}
-                      className={`rounded-md border px-2 py-1 text-xs ${active ? "border-teal-200 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600 hover:border-teal-300 hover:text-teal-900"} disabled:opacity-50`}
+                      className={`rounded-md border px-2 py-1 text-xs ${active ? "border-accent bg-accent/50 text-primary" : "border-border text-muted-foreground hover:border-primary hover:text-primary"} disabled:opacity-50`}
                       onClick={() => addKeywords([keyword])}
                     >
                       {active ? "✓ " : "+ "}
@@ -700,7 +726,7 @@ export default function ResearchPage() {
             <input
               type="number"
               step="0.01"
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5"
+              className="mt-1 w-full rounded-md border border-input px-2 py-1.5"
               value={minPrice}
               onChange={(e) => setMinPrice(e.target.value)}
             />
@@ -710,7 +736,7 @@ export default function ResearchPage() {
             <input
               type="number"
               step="0.01"
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5"
+              className="mt-1 w-full rounded-md border border-input px-2 py-1.5"
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
             />
@@ -719,7 +745,7 @@ export default function ResearchPage() {
             Min active listings
             <input
               type="number"
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5"
+              className="mt-1 w-full rounded-md border border-input px-2 py-1.5"
               value={minListings}
               onChange={(e) => setMinListings(e.target.value)}
             />
@@ -728,7 +754,7 @@ export default function ResearchPage() {
             Max active listings
             <input
               type="number"
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5"
+              className="mt-1 w-full rounded-md border border-input px-2 py-1.5"
               value={maxListings}
               onChange={(e) => setMaxListings(e.target.value)}
             />
@@ -737,17 +763,17 @@ export default function ResearchPage() {
             Browse limit / keyword
             <input
               type="number"
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5"
+              className="mt-1 w-full rounded-md border border-input px-2 py-1.5"
               value={searchLimit}
               onChange={(e) => setSearchLimit(e.target.value)}
             />
           </label>
         </div>
-        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
           <input type="checkbox" className="mt-1" checked={highQualityFilter} onChange={(e) => setHighQualityFilter(e.target.checked)} />
           <span>
-            <span className="font-medium text-slate-900">High-margin opportunity filter</span>
-            <span className="mt-1 block text-slate-600">
+            <span className="font-medium text-foreground">High-margin opportunity filter</span>
+            <span className="mt-1 block text-muted-foreground">
               Optional. Raises min eBay price to ${HIGH_QUALITY_MIN_EBAY_DOLLARS}+ on research, then AE match requires cheap landed cost
               (≤50% of eBay), ≥15% net margin, and 100+ AE orders.
             </span>
@@ -756,13 +782,13 @@ export default function ResearchPage() {
         <button
           type="submit"
           disabled={busy}
-          className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/80 disabled:opacity-50"
         >
           {busy ? "Working…" : "Run research"}
         </button>
       </form>
 
-      {message && <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p>}
+      {message && <p className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground/80">{message}</p>}
 
       {matchSummary && (
         <section className="overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50">
@@ -780,19 +806,19 @@ export default function ResearchPage() {
           </div>
           <div className="grid gap-2 p-3 md:grid-cols-2">
             {matchSummary.map((idea) => (
-              <div key={idea.id} className="flex min-w-0 items-center gap-3 rounded-md border border-emerald-200 bg-white p-3">
+              <div key={idea.id} className="flex min-w-0 items-center gap-3 rounded-md border border-emerald-200 bg-card p-3">
                 <MatchResultImage src={idea.aeMatch?.imageUrl} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-900">{idea.aeMatch?.title ?? idea.title}</p>
+                  <p className="truncate text-sm font-medium text-foreground">{idea.aeMatch?.title ?? idea.title}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                     <span className={idea.status === "AE_MATCHED" ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
                       {idea.status === "AE_MATCHED" ? "✓ AE match found" : "Needs review"}
                     </span>
                     {idea.aeMatch?.visualAvailable && idea.aeMatch.visualScore != null && (
-                      <span className="text-slate-600">Visual {idea.aeMatch.visualScore}/100</span>
+                      <span className="text-muted-foreground">Visual {idea.aeMatch.visualScore}/100</span>
                     )}
                     {idea.productCandidateId && (
-                      <Link href={`/candidates/${idea.productCandidateId}`} className="font-medium text-teal-700 hover:underline">
+                      <Link href={`/candidates/${idea.productCandidateId}`} className="font-medium text-primary hover:underline">
                         Open candidate
                       </Link>
                     )}
@@ -808,7 +834,7 @@ export default function ResearchPage() {
         <label className="text-sm">
           Run
           <select
-            className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="mt-1 block rounded-md border border-input px-3 py-2 text-sm"
             value={selectedRunId}
             onChange={(e) => {
               const id = e.target.value;
@@ -829,7 +855,7 @@ export default function ResearchPage() {
         <label className="text-sm">
           Status
           <select
-            className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="mt-1 block rounded-md border border-input px-3 py-2 text-sm"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
@@ -847,7 +873,7 @@ export default function ResearchPage() {
           type="button"
           disabled={busy || selected.size === 0}
           onClick={matchSelected}
-          className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/80 disabled:opacity-50"
         >
           Find AE match ({selected.size}){highQualityFilter ? " · HQ" : ""}
         </button>
@@ -855,15 +881,15 @@ export default function ResearchPage() {
           type="button"
           disabled={busy || ideas.length === 0}
           onClick={refreshSoldCounts}
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-md border border-input bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
         >
           Refresh sold counts
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="min-w-full text-left text-sm">
-          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="border-b bg-muted text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-3 py-2">
                 <input type="checkbox" onChange={toggleAllMatchable} aria-label="Select all matchable ideas" />
@@ -887,15 +913,27 @@ export default function ResearchPage() {
           <tbody>
             {ideas.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
-                  No ideas yet. Run research with seed keywords.
+                <td colSpan={10} className="p-0">
+                  <div className="relative m-3 overflow-hidden rounded-xl">
+                    <Image
+                      src="/media/overview-empty.jpg"
+                      alt="Research workspace"
+                      width={1200}
+                      height={400}
+                      className="h-40 w-full object-cover"
+                    />
+                    <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 to-transparent p-4 text-white">
+                      <p className="font-medium">No ideas yet</p>
+                      <p className="text-xs text-white/80">Add seed keywords above and run research to fill this table.</p>
+                    </div>
+                  </div>
                 </td>
               </tr>
             )}
             {ideas.map((idea) => (
               <tr
                 key={idea.id}
-                className={`border-b align-top transition-colors ${recentlyProcessed.has(idea.id) ? (idea.status === "AE_MATCHED" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50") : "border-slate-100"}`}
+                className={`border-b align-top transition-colors ${recentlyProcessed.has(idea.id) ? (idea.status === "AE_MATCHED" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50") : "border-border/70"}`}
               >
                 <td className="px-3 py-3">
                   {idea.status === "AE_MATCHED" ? (
@@ -923,7 +961,7 @@ export default function ResearchPage() {
                     )}
                     <div>
                       {idea.ebayUrl ? (
-                        <a href={idea.ebayUrl} target="_blank" rel="noreferrer" className="font-medium text-teal-800 hover:underline">
+                        <a href={idea.ebayUrl} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
                           {idea.title}
                         </a>
                       ) : (
@@ -932,10 +970,10 @@ export default function ResearchPage() {
                     </div>
                   </div>
                 </td>
-                <td className="px-3 py-3 text-slate-600">{idea.searchKeyword ?? "—"}</td>
+                <td className="px-3 py-3 text-muted-foreground">{idea.searchKeyword ?? "—"}</td>
                 <td className="px-3 py-3 tabular-nums">
                   {money(idea.priceMinor)}
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-muted-foreground">
                     {money(idea.priceMinMinor)}–{money(idea.priceMaxMinor)} · med {money(idea.priceMedianMinor)}
                   </div>
                 </td>
@@ -947,8 +985,8 @@ export default function ResearchPage() {
                         idea.soldLast30Days >= 5
                           ? "font-semibold text-emerald-800"
                           : idea.soldLast30Days > 0
-                            ? "font-medium text-slate-800"
-                            : "text-slate-500"
+                            ? "font-medium text-foreground"
+                            : "text-muted-foreground"
                       }
                       title={
                         idea.soldCountSource === "browse_estimate"
@@ -962,11 +1000,11 @@ export default function ResearchPage() {
                     >
                       {idea.soldLast30Days}
                       {idea.soldCountSource === "browse_estimate" ? (
-                        <span className="ml-1 text-[10px] font-normal uppercase tracking-wide text-slate-400">life est</span>
+                        <span className="ml-1 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">life est</span>
                       ) : null}
                     </span>
                   ) : (
-                    <span className="text-xs text-slate-400" title="Sold count not fetched yet — use Refresh sold">
+                    <span className="text-xs text-muted-foreground" title="Sold count not fetched yet — use Refresh sold">
                       —
                     </span>
                   )}
@@ -975,8 +1013,8 @@ export default function ResearchPage() {
                   {idea.aeMatch?.visualAvailable && idea.aeMatch.visualScore != null ? (
                     <div title="DINOv2 image similarity score">
                       <div className="flex items-center justify-between gap-2 text-xs">
-                        <span className="font-semibold tabular-nums text-slate-800">{idea.aeMatch.visualScore}/100</span>
-                        <span className="text-slate-500">DINOv2</span>
+                        <span className="font-semibold tabular-nums text-foreground">{idea.aeMatch.visualScore}/100</span>
+                        <span className="text-muted-foreground">DINOv2</span>
                       </div>
                       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
                         <div
@@ -986,12 +1024,12 @@ export default function ResearchPage() {
                       </div>
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-400">Not available</span>
+                    <span className="text-xs text-muted-foreground">Not available</span>
                   )}
                 </td>
                 <td className="px-3 py-3">
                   <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${idea.status === "AE_MATCHED" ? "bg-emerald-100 text-emerald-800" : idea.status === "REJECTED" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}`}
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${idea.status === "AE_MATCHED" ? "bg-emerald-100 text-emerald-800" : idea.status === "REJECTED" ? "bg-amber-100 text-amber-800" : "bg-muted text-foreground/80"}`}
                   >
                     {idea.status === "AE_MATCHED"
                       ? "✓ AE matched"
@@ -1001,7 +1039,7 @@ export default function ResearchPage() {
                   </span>
                   {idea.productCandidateId && (
                     <div className="mt-1">
-                      <Link href={`/candidates/${idea.productCandidateId}`} className="text-xs text-teal-700 hover:underline">
+                      <Link href={`/candidates/${idea.productCandidateId}`} className="text-xs text-primary hover:underline">
                         View candidate
                       </Link>
                     </div>
@@ -1009,7 +1047,7 @@ export default function ResearchPage() {
                 </td>
                 <td className="px-3 py-3">
                   {idea.status === "DISCOVERED" && (
-                    <button type="button" className="text-xs text-slate-600 hover:underline" onClick={() => dismissIdea(idea.id)}>
+                    <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => dismissIdea(idea.id)}>
                       Dismiss
                     </button>
                   )}
@@ -1019,6 +1057,51 @@ export default function ResearchPage() {
           </tbody>
         </table>
       </div>
+
+      <section className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm ring-1 ring-black/5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold">Active-listing proxy</p>
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800">Browse</span>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Opportunity score uses price band + active competition — not verified 30-day sold. Use Refresh sold / Insights for true
+            demand.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm ring-1 ring-black/5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold">Match gate</p>
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-900">Action</span>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Select ideas → Find AE match. Visual DINOv2 scores appear when image search runs. HQ filter prefers higher ASP seeds.
+          </p>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-border bg-[#0b1f4d] text-white shadow-sm ring-1 ring-black/5">
+          <div className="relative p-4">
+            <Image
+              src="/media/product-tech.jpg"
+              alt=""
+              width={400}
+              height={120}
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25"
+            />
+            <div className="relative">
+              <p className="text-sm font-semibold">Auto-research</p>
+              <p className="mt-2 text-xs leading-relaxed text-blue-100/90">
+                Prefer hands-off? Start an Automation run — same matching stack with approval before export.
+              </p>
+              <Link
+                href="/automation"
+                className="mt-3 inline-flex rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-[#0b1f4d] hover:bg-blue-50"
+              >
+                Open Automation
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

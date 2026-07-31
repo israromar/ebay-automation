@@ -68,13 +68,13 @@ export default function SchedulesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold">Schedules & jobs</h2>
-        <p className="text-sm text-slate-600">Daily/weekly/cron supported. Hourly is intentionally not the default.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Schedules</h1>
+        <p className="text-sm text-muted-foreground">Daily/weekly/cron supported. Hourly is intentionally not the default.</p>
       </div>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+      <section className="rounded-lg border border-border bg-card p-4 space-y-3">
         <h3 className="font-medium">Export approved candidates</h3>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted-foreground">
           Only candidates with status <span className="font-medium">APPROVED</span> are exported. If count is 0, approve one candidate first
           via Manual demand validation.
         </p>
@@ -83,7 +83,7 @@ export default function SchedulesPage() {
             type="button"
             disabled={exporting}
             onClick={() => exportApproved("google_sheets")}
-            className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
             {exporting ? "Exporting…" : "Export to Google Sheets"}
           </button>
@@ -96,10 +96,10 @@ export default function SchedulesPage() {
             Export approved CSV
           </button>
         </div>
-        {msg ? <p className="text-xs text-slate-700 break-all">{msg}</p> : null}
+        {msg ? <p className="text-xs text-foreground/80 break-all">{msg}</p> : null}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+      <section className="rounded-lg border border-border bg-card p-4 space-y-3">
         <h3 className="font-medium">Create schedule</h3>
         <div className="grid gap-2 sm:grid-cols-3">
           <input className="rounded-md border px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} />
@@ -107,7 +107,7 @@ export default function SchedulesPage() {
           <input className="rounded-md border px-3 py-2 text-sm" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={create} className="rounded-md bg-teal-700 px-3 py-2 text-sm text-white">
+          <button type="button" onClick={create} className="rounded-md bg-primary px-3 py-2 text-sm text-white">
             Create
           </button>
           <button type="button" onClick={tick} className="rounded-md border px-3 py-2 text-sm">
@@ -116,11 +116,11 @@ export default function SchedulesPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-border bg-card p-4">
         <h3 className="font-medium">Schedules</h3>
         <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(schedules, null, 2)}</pre>
       </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-border bg-card p-4">
         <h3 className="font-medium">Recent jobs</h3>
         <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(jobs, null, 2)}</pre>
       </section>

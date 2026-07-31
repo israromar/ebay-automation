@@ -121,9 +121,11 @@ export default function AutomationPage() {
     }
   }, []);
 
-  const loadRun = useCallback(async (id: string) => {
+  const loadRun = useCallback(async (id: string, opts?: { silent?: boolean }) => {
     try {
-      const res = await fetch(`/api/automation/runs/${id}`);
+      const res = await fetch(`/api/automation/runs/${id}`, {
+        headers: opts?.silent ? { "x-pulse-silent": "1" } : undefined,
+      });
       const json = await readJsonResponse<{ run?: Run; reviewItems?: ReviewItem[]; error?: string }>(res);
       if (!res.ok || !json.run) throw new Error(json.error ?? "Unable to load automation run");
       setRun(json.run);
@@ -152,7 +154,7 @@ export default function AutomationPage() {
     if (!activeRunId || !run) return;
     if (!["PENDING", "RUNNING"].includes(run.status)) return;
     const timer = setInterval(() => {
-      void loadRun(activeRunId);
+      void loadRun(activeRunId, { silent: true });
     }, 2500);
     return () => clearInterval(timer);
   }, [activeRunId, run, loadRun]);
@@ -265,50 +267,51 @@ export default function AutomationPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold">Automation control center</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            One button runs keywords → eBay discovery → AE match → decisions. You approve once, then export.
+          <p className="text-xs font-medium text-muted-foreground">Ops / Automation</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Automations</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            One run: keywords → eBay discovery → AE match → decisions. Approve once, then export CSV or Sheets.
           </p>
         </div>
         <button
           type="button"
           disabled={busy}
           onClick={startRun}
-          className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 disabled:opacity-60"
         >
-          {busy ? "Working…" : "Run complete research"}
+          {busy ? "Working…" : "+ Run complete research"}
         </button>
       </div>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <label className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-          <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">Top keywords</span>
+        <label className="rounded-lg border border-border bg-card p-3 text-sm">
+          <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Top keywords</span>
           <input
             type="number"
             min={1}
             max={20}
             value={topKeywords}
             onChange={(event) => setTopKeywords(Number(event.target.value))}
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+            className="mt-1 w-full rounded border border-input px-2 py-1"
           />
         </label>
-        <label className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-          <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">Top ideas to match</span>
+        <label className="rounded-lg border border-border bg-card p-3 text-sm">
+          <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Top ideas to match</span>
           <input
             type="number"
             min={1}
             max={40}
             value={topIdeas}
             onChange={(event) => setTopIdeas(Number(event.target.value))}
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+            className="mt-1 w-full rounded border border-input px-2 py-1"
           />
         </label>
-        <label className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-          <span className="block text-xs font-medium uppercase tracking-wide text-slate-500">Export destination</span>
+        <label className="rounded-lg border border-border bg-card p-3 text-sm">
+          <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Export destination</span>
           <select
             value={destination}
             onChange={(event) => setDestination(event.target.value as "csv" | "google_sheets")}
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+            className="mt-1 w-full rounded border border-input px-2 py-1"
           >
             <option value="csv">CSV</option>
             <option value="google_sheets">Google Sheets</option>
@@ -316,7 +319,7 @@ export default function AutomationPage() {
         </label>
       </section>
 
-      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3 text-sm">
         <input
           type="checkbox"
           className="mt-1"
@@ -324,8 +327,8 @@ export default function AutomationPage() {
           onChange={(event) => setHighQualityFilter(event.target.checked)}
         />
         <span>
-          <span className="font-medium text-slate-900">High-margin opportunity filter</span>
-          <span className="mt-1 block text-slate-600">
+          <span className="font-medium text-foreground">High-margin opportunity filter</span>
+          <span className="mt-1 block text-muted-foreground">
             Optional. Prefers higher eBay prices ($25+), cheap AE landed cost (≤50% of eBay), net margin ≥15%, and high AE volume (100+
             orders). Baseline matching stays unchanged when off.
           </span>
@@ -333,13 +336,13 @@ export default function AutomationPage() {
       </label>
 
       {capabilities ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+        <section className="rounded-lg border border-border bg-card p-4 text-sm">
           <h3 className="font-medium">Provider capabilities</h3>
           <div className="mt-2 flex flex-wrap gap-2">
             {Object.entries(capabilities).map(([key, enabled]) => (
               <span
                 key={key}
-                className={`rounded-full px-2 py-1 text-xs ${enabled ? "bg-teal-50 text-teal-800" : "bg-amber-50 text-amber-800"}`}
+                className={`rounded-full px-2 py-1 text-xs ${enabled ? "bg-accent/50 text-primary" : "bg-amber-50 text-amber-800"}`}
               >
                 {key}: {enabled ? "ready" : "fallback"}
               </span>
@@ -348,10 +351,10 @@ export default function AutomationPage() {
         </section>
       ) : null}
 
-      {message ? <p className="text-sm text-slate-700">{message}</p> : null}
+      {message ? <p className="text-sm text-foreground/80">{message}</p> : null}
 
       <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-        <aside className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+        <aside className="rounded-lg border border-border bg-card p-3 text-sm">
           <h3 className="font-medium">Recent runs</h3>
           <ul className="mt-2 space-y-2">
             {runs.map((entry) => (
@@ -359,10 +362,10 @@ export default function AutomationPage() {
                 <button
                   type="button"
                   onClick={() => void loadRun(entry.id)}
-                  className={`w-full rounded-md px-2 py-2 text-left hover:bg-slate-50 ${activeRunId === entry.id ? "bg-slate-100" : ""}`}
+                  className={`w-full rounded-md px-2 py-2 text-left hover:bg-muted ${activeRunId === entry.id ? "bg-muted" : ""}`}
                 >
                   <span className="block font-medium">{entry.status}</span>
-                  <span className="block text-xs text-slate-500">{new Date(entry.startedAt).toLocaleString()}</span>
+                  <span className="block text-xs text-muted-foreground">{new Date(entry.startedAt).toLocaleString()}</span>
                 </button>
               </li>
             ))}
@@ -372,18 +375,18 @@ export default function AutomationPage() {
         <div className="space-y-4">
           {run ? (
             <>
-              <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <section className="rounded-lg border border-border bg-card p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="font-medium">Run {run.id.slice(0, 8)}</h3>
-                    <p className="text-sm text-slate-600">Status: {run.status}</p>
+                    <p className="text-sm text-muted-foreground">Status: {run.status}</p>
                   </div>
                   {["PENDING", "RUNNING"].includes(run.status) ? (
                     <button
                       type="button"
                       disabled={busy}
                       onClick={cancelRun}
-                      className="rounded-md border border-slate-300 px-3 py-1 text-sm"
+                      className="rounded-md border border-input px-3 py-1 text-sm"
                     >
                       Cancel
                     </button>
@@ -391,19 +394,19 @@ export default function AutomationPage() {
                 </div>
                 {run.error ? <p className="mt-2 text-sm text-amber-800">{run.error}</p> : null}
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-                  <div className="rounded border border-slate-200 p-2">Keywords: {String(progress.keywordsSelected ?? 0)}</div>
-                  <div className="rounded border border-slate-200 p-2">Ideas: {String(progress.ideasFound ?? 0)}</div>
-                  <div className="rounded border border-slate-200 p-2">Candidates: {String(progress.candidatesCreated ?? 0)}</div>
-                  <div className="rounded border border-slate-200 p-2">
+                  <div className="rounded border border-border p-2">Keywords: {String(progress.keywordsSelected ?? 0)}</div>
+                  <div className="rounded border border-border p-2">Ideas: {String(progress.ideasFound ?? 0)}</div>
+                  <div className="rounded border border-border p-2">Candidates: {String(progress.candidatesCreated ?? 0)}</div>
+                  <div className="rounded border border-border p-2">
                     Ready / Evidence / Rejected: {String(progress.readyForApproval ?? 0)} / {String(progress.needsEvidence ?? 0)} /{" "}
                     {String(progress.rejected ?? 0)}
                   </div>
                 </div>
                 <ol className="mt-4 space-y-2">
                   {run.stages.map((stage) => (
-                    <li key={stage.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-sm">
+                    <li key={stage.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
                       <span className="font-medium">{stage.stage}</span>
-                      <span className="text-slate-600">
+                      <span className="text-muted-foreground">
                         {stage.status}
                         {stage.progressTotal > 0 ? ` · ${stage.progressCurrent}/${stage.progressTotal}` : ""}
                         {stage.error ? ` · ${stage.error}` : ""}
@@ -414,11 +417,11 @@ export default function AutomationPage() {
               </section>
 
               {run.status === "AWAITING_APPROVAL" || reviewItems.length > 0 ? (
-                <section className="rounded-lg border border-slate-200 bg-white p-4">
+                <section className="rounded-lg border border-border bg-card p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="font-medium">Final approval gate</h3>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-muted-foreground">
                         Review matches, enter sold counts where needed, then approve and export in one step.
                       </p>
                     </div>
@@ -427,7 +430,7 @@ export default function AutomationPage() {
                         type="button"
                         disabled={busy}
                         onClick={approveAndPrepareExport}
-                        className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
                       >
                         Approve and export
                       </button>
@@ -441,7 +444,7 @@ export default function AutomationPage() {
                       const reasons = parseReasons(item.decision.reasonsJson);
                       const checked = Boolean(selected[candidate.id]);
                       return (
-                        <div key={item.decision.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                        <div key={item.decision.id} className="rounded-md border border-border p-3 text-sm">
                           <div className="flex flex-wrap gap-3">
                             {candidate.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -457,7 +460,7 @@ export default function AutomationPage() {
                                 />
                                 <span className="font-medium">{candidate.productName}</span>
                               </label>
-                              <p className="mt-1 text-xs text-slate-600">
+                              <p className="mt-1 text-xs text-muted-foreground">
                                 {item.decision.outcome} · match {candidate.matchConfidence ?? "—"} · AE{" "}
                                 {money(candidate.aliexpressPriceMinor)} · ship{" "}
                                 {typeof candidate.aliexpressShippingMinor === "number"
@@ -469,7 +472,7 @@ export default function AutomationPage() {
                               {reasons.length ? <p className="mt-1 text-xs text-amber-700">{reasons.join(" · ")}</p> : null}
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {candidate.ebayUrl ? (
-                                  <a href={candidate.ebayUrl} target="_blank" rel="noreferrer" className="text-xs text-teal-700 underline">
+                                  <a href={candidate.ebayUrl} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
                                     eBay
                                   </a>
                                 ) : null}
@@ -478,12 +481,12 @@ export default function AutomationPage() {
                                     href={candidate.aliexpressUrl}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-xs text-teal-700 underline"
+                                    className="text-xs text-primary underline"
                                   >
                                     AliExpress
                                   </a>
                                 ) : null}
-                                <Link href={`/candidates/${candidate.id}`} className="text-xs text-slate-700 underline">
+                                <Link href={`/candidates/${candidate.id}`} className="text-xs text-foreground/80 underline">
                                   Details
                                 </Link>
                               </div>
@@ -495,7 +498,7 @@ export default function AutomationPage() {
                                     placeholder="Sold last 30 days"
                                     value={soldById[candidate.id] ?? ""}
                                     onChange={(event) => setSoldById((prev) => ({ ...prev, [candidate.id]: event.target.value }))}
-                                    className="rounded border border-slate-300 px-2 py-1"
+                                    className="rounded border border-input px-2 py-1"
                                   />
                                   <input
                                     type="number"
@@ -504,7 +507,7 @@ export default function AutomationPage() {
                                     placeholder="Avg sold price (USD)"
                                     value={avgById[candidate.id] ?? ""}
                                     onChange={(event) => setAvgById((prev) => ({ ...prev, [candidate.id]: event.target.value }))}
-                                    className="rounded border border-slate-300 px-2 py-1"
+                                    className="rounded border border-input px-2 py-1"
                                   />
                                 </div>
                               ) : null}
@@ -518,7 +521,7 @@ export default function AutomationPage() {
               ) : null}
             </>
           ) : (
-            <section className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-600">
+            <section className="rounded-lg border border-dashed border-input bg-card p-8 text-sm text-muted-foreground">
               Start a run to watch stages and complete the final approval gate here.
             </section>
           )}

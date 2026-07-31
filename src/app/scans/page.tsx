@@ -13,10 +13,11 @@ export default function ScansPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-semibold">Run history</h2>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <h1 className="text-2xl font-semibold tracking-tight">Scans</h1>
+      <p className="text-sm text-muted-foreground">Keyword and URL scan history for this workspace.</p>
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="min-w-full text-sm">
-          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="border-b bg-muted text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-left">Scan ID</th>
               <th className="px-3 py-2 text-left">Keyword</th>
@@ -28,7 +29,7 @@ export default function ScansPage() {
           </thead>
           <tbody>
             {scans.map((s) => (
-              <tr key={String(s.id)} className="border-b border-slate-100">
+              <tr key={String(s.id)} className="border-b border-border/70">
                 <td className="px-3 py-2 font-mono text-xs">{String(s.id)}</td>
                 <td className="px-3 py-2">{String(s.keyword ?? "")}</td>
                 <td className="px-3 py-2">{String(s.mode)}</td>

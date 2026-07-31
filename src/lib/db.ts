@@ -61,10 +61,9 @@ function getPrisma(): PrismaClient {
     void existing.$disconnect().catch(() => undefined);
   }
   const client = createPrismaClient();
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = client;
-    globalForPrisma.prismaSchemaFingerprint = fingerprint;
-  }
+  // Always reuse one client per process (dev HMR + serverless warm instances).
+  globalForPrisma.prisma = client;
+  globalForPrisma.prismaSchemaFingerprint = fingerprint;
   return client;
 }
 

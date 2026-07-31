@@ -1,7 +1,19 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { cn } from "@/lib/utils";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+});
 
 export const metadata: Metadata = {
   title: "Product Research Analyzer",
@@ -10,9 +22,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        <Suspense fallback={<main className="mx-auto max-w-6xl px-4 py-6">{children}</main>}>
+    <html lang="en" className={cn(inter.variable, jetbrains.variable, "font-sans")}>
+      <body className="min-h-screen bg-background text-foreground">
+        <Suspense fallback={<main className="p-6 text-sm text-muted-foreground">Loading…</main>}>
           <AppShell>{children}</AppShell>
         </Suspense>
       </body>
