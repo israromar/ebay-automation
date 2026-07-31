@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
-import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
+import {
+  createAliExpressProvider,
+  createEbayProvider,
+  createVisualMatchProvider,
+  loadWorkspaceRules,
+} from "@/lib/services/providers";
 import { z } from "zod";
 
 const schema = z.object({
@@ -19,6 +24,9 @@ function parseCsvKeywords(csvText: string): string[] {
 }
 
 export async function POST(req: Request) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const json = await req.json();
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
@@ -32,11 +40,11 @@ export async function POST(req: Request) {
   }
 
   const orchestrator = new ScanOrchestrator({
-    aliexpress: new AliExpressManualImportProvider(sampleAliExpressCatalog()),
-    ebay: new EbayBrowseApiProvider({
-      clientId: process.env.EBAY_CLIENT_ID ?? "",
-      clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",
-    }),
+    aliexpress: createAliExpressProvider(),
+    ebay: createEbayProvider(),
+    visualMatch: createVisualMatchProvider(),
+    rules: await loadWorkspaceRules(session.workspace.id),
+    workspaceId: session.workspace.id,
   });
 
   const results = [];

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { DEFAULT_HIGH_QUALITY_THRESHOLDS, evaluateHighQualityFilter, withHighQualityRules } from "@/lib/domain/high-quality-filter";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
+import {
+  DEFAULT_HIGH_QUALITY_THRESHOLDS,
+  evaluateHighQualityFilter,
+  withHighQualityRules,
+} from "@/lib/domain/high-quality-filter";
 import { deriveTrendIdeaMatchStatus } from "@/lib/domain/trend-match-status";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
 import { createAliExpressProvider, createEbayProvider, createVisualMatchProvider, loadWorkspaceRules } from "@/lib/services/providers";
@@ -26,13 +31,26 @@ function parseReasons(raw?: string | null): string[] {
 }
 
 export async function POST(req: Request) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const json = await req.json();
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const rules = await loadWorkspaceRules();
+  const owned = await prisma.trendIdea.count({
+    where: {
+      id: { in: parsed.data.ideaIds },
+      run: { workspaceId: session.workspace.id },
+    },
+  });
+  if (owned !== parsed.data.ideaIds.length) {
+    return NextResponse.json({ error: "One or more ideas are not in your workspace" }, { status: 403 });
+  }
+
+  const rules = await loadWorkspaceRules(session.workspace.id);
   const hqEnabled = parsed.data.highQualityFilter === true;
   const thresholds = {
     minEbayPriceMinor: parsed.data.highQualityMinEbayPriceMinor ?? DEFAULT_HIGH_QUALITY_THRESHOLDS.minEbayPriceMinor,
@@ -47,6 +65,7 @@ export async function POST(req: Request) {
     ebay: createEbayProvider(),
     visualMatch: createVisualMatchProvider(),
     rules: effectiveRules,
+    workspaceId: session.workspace.id,
   });
   const result = await orchestrator.matchTrendIdeas(parsed.data.ideaIds);
 

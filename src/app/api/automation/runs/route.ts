@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
+import { assertResearchRunAllowed } from "@/lib/auth/usage-caps";
 import { detectAutomationCapabilities } from "@/lib/domain/automation";
 import { AutonomousResearchOrchestrator } from "@/lib/services/autonomous-research";
 
@@ -25,9 +27,12 @@ const startSchema = z.object({
 });
 
 export async function GET() {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   try {
     const orchestrator = new AutonomousResearchOrchestrator();
-    const runs = await orchestrator.listRuns(30);
+    const runs = await orchestrator.listRuns(30, session.workspace.id);
     return NextResponse.json({
       runs,
       capabilities: detectAutomationCapabilities(),
@@ -39,6 +44,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
+  const cap = await assertResearchRunAllowed(session.workspace.id);
+  if (!cap.ok) {
+    return NextResponse.json({ error: cap.message }, { status: 429 });
+  }
+
   const json = await req.json().catch(() => ({}));
   const parsed = startSchema.safeParse(json);
   if (!parsed.success) {
@@ -46,7 +59,7 @@ export async function POST(req: Request) {
   }
   try {
     const orchestrator = new AutonomousResearchOrchestrator();
-    const run = await orchestrator.start(parsed.data);
+    const run = await orchestrator.start({ ...parsed.data, workspaceId: session.workspace.id });
     // Kick the first stage immediately so the UI shows progress without a worker.
     const advanced = await orchestrator.advance(run.id);
     return NextResponse.json({ run: advanced });

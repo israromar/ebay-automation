@@ -49,6 +49,8 @@ export interface ScanOrchestratorDeps {
   exporter?: SpreadsheetExporter;
   rules?: QualificationRules;
   visualMatch?: VisualMatchProvider;
+  /** When set, new projects/scans are created under this workspace. */
+  workspaceId?: string;
 }
 
 export class ScanOrchestrator {
@@ -58,12 +60,17 @@ export class ScanOrchestrator {
     this.rules = { ...DEFAULT_RULES, ...deps.rules };
   }
 
+  private async resolveWorkspaceId() {
+    if (this.deps.workspaceId) return this.deps.workspaceId;
+    return (await ensureDefaultWorkspace()).id;
+  }
+
   async run(input: ScanInput) {
-    const workspace = await ensureDefaultWorkspace();
+    const workspaceId = await this.resolveWorkspaceId();
     const project = await prisma.searchProject.create({
       data: {
         name: input.projectName ?? `Scan ${input.keyword}`,
-        workspaceId: workspace.id,
+        workspaceId,
         keywords: { create: [{ keyword: input.keyword }] },
       },
     });
@@ -178,11 +185,11 @@ export class ScanOrchestrator {
       return { candidates: [] as Awaited<ReturnType<ScanOrchestrator["processEbaySeededProduct"]>>[] };
     }
 
-    const workspace = await ensureDefaultWorkspace();
+    const workspaceId = await this.resolveWorkspaceId();
     const project = await prisma.searchProject.create({
       data: {
         name: `Trend AE match ${new Date().toISOString().slice(0, 10)}`,
-        workspaceId: workspace.id,
+        workspaceId,
         keywords: {
           create: [
             {
@@ -1180,7 +1187,8 @@ export class ScanOrchestrator {
     return updated;
   }
 
-  async exportApproved(exporter: SpreadsheetExporter, options?: { candidateIds?: string[] }) {
+  async exportApproved(exporter: SpreadsheetExporter, options?: { candidateIds?: string[]; workspaceId?: string }) {
+    const workspaceId = options?.workspaceId ?? this.deps.workspaceId;
     const approved = await prisma.productCandidate.findMany({
       where: {
         status: { in: ["APPROVED", "EXPORT_PENDING"] },
@@ -1188,6 +1196,7 @@ export class ScanOrchestrator {
         aliexpressUrl: { not: null },
         aliexpressPriceMinor: { not: null },
         aliexpressShippingMinor: { not: null },
+        ...(workspaceId ? { scan: { project: { workspaceId } } } : {}),
         ...(options?.candidateIds?.length ? { id: { in: options.candidateIds } } : {}),
       },
     });

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
+import { candidateInWorkspace } from "@/lib/auth/workspace-access";
 import { prisma } from "@/lib/db";
-import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
-import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
+import { createAliExpressProvider, createEbayProvider, createVisualMatchProvider, loadWorkspaceRules } from "@/lib/services/providers";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
 import { z } from "zod";
 
@@ -15,7 +16,14 @@ const schema = z.object({
 });
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const { id } = await ctx.params;
+  if (!(await candidateInWorkspace(id, session.workspace.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const candidate = await prisma.productCandidate.findUnique({
     where: { id },
     include: {
@@ -35,18 +43,25 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const { id } = await ctx.params;
+  if (!(await candidateInWorkspace(id, session.workspace.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const json = await req.json();
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const orchestrator = new ScanOrchestrator({
-    aliexpress: new AliExpressManualImportProvider(sampleAliExpressCatalog()),
-    ebay: new EbayBrowseApiProvider({
-      clientId: process.env.EBAY_CLIENT_ID ?? "",
-      clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",
-    }),
+    aliexpress: createAliExpressProvider(),
+    ebay: createEbayProvider(),
+    visualMatch: createVisualMatchProvider(),
+    rules: await loadWorkspaceRules(session.workspace.id),
+    workspaceId: session.workspace.id,
   });
   try {
     const updated = await orchestrator.applyManualDemand(id, parsed.data);

@@ -21,12 +21,15 @@
     "aliexpress:advanced-probe": "tsx scripts/aliexpress-advanced-probe.ts",
     "mcp": "tsx mcp/server.ts",
     "worker:tick": "NODE_OPTIONS='--import ./src/lib/providers/register-ort-loader.mjs' tsx scripts/scheduler-tick.ts",
+    "db:migrate-owner-workspace": "tsx scripts/migrate-owner-workspace.ts",
     "visual:probe": "NODE_OPTIONS='--import ./src/lib/providers/register-ort-loader.mjs' tsx scripts/probe-visual-match.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@modelcontextprotocol/sdk": "^1.11.1",
     "@prisma/client": "^6.19.0",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.111.0",
     "date-fns": "^4.4.0",
     "googleapis": "^173.0.0",
     "nanoid": "^6.0.0",

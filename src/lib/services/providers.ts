@@ -33,14 +33,15 @@ export function createVisualMatchProvider(): VisualMatchProvider | undefined {
   return new Dinov2VisualMatchProvider();
 }
 
+/** Legacy single-workspace helper for workers/tests when auth is disabled. */
 export async function ensureDefaultWorkspace() {
-  let user = await prisma.user.findFirst();
+  let user = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
   if (!user) {
     user = await prisma.user.create({
       data: { email: "operator@local.dev", name: "Local Operator" },
     });
   }
-  let workspace = await prisma.workspace.findFirst({ where: { userId: user.id } });
+  let workspace = await prisma.workspace.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
   if (!workspace) {
     workspace = await prisma.workspace.create({
       data: {
@@ -53,10 +54,10 @@ export async function ensureDefaultWorkspace() {
   return workspace;
 }
 
-export async function loadWorkspaceRules(): Promise<QualificationRules> {
-  const workspace = await ensureDefaultWorkspace();
+export async function loadWorkspaceRules(workspaceId?: string): Promise<QualificationRules> {
+  const id = workspaceId ?? (await ensureDefaultWorkspace()).id;
   const settings = await prisma.workspaceSettings.findUnique({
-    where: { workspaceId: workspace.id },
+    where: { workspaceId: id },
   });
   if (!settings) return { ...DEFAULT_RULES };
   return {

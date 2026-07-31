@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { isPrismaConnectionError, resetPrismaClient } from "@/lib/db";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
 import { createEbayProvider } from "@/lib/services/providers";
 import { TrendResearchService } from "@/lib/services/trend-research";
+import { prisma } from "@/lib/db";
 import { z } from "zod";
 
 const schema = z.object({
@@ -9,34 +10,26 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const json = await req.json().catch(() => ({}));
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const service = new TrendResearchService(createEbayProvider());
-  try {
-    const result = await service.enrichSoldCounts(parsed.data.ideaIds);
-    return NextResponse.json(result);
-  } catch (error) {
-    if (isPrismaConnectionError(error)) {
-      await resetPrismaClient();
-      try {
-        const result = await service.enrichSoldCounts(parsed.data.ideaIds);
-        return NextResponse.json(result);
-      } catch (retryError) {
-        const message = retryError instanceof Error ? retryError.message : "Database unreachable";
-        return NextResponse.json(
-          {
-            error: "Database connection failed. Check Supabase status / network, then retry Refresh sold counts.",
-            detail: message.slice(0, 240),
-          },
-          { status: 503 },
-        );
-      }
-    }
-    const message = error instanceof Error ? error.message : "Unable to enrich sold counts";
-    return NextResponse.json({ error: message }, { status: 500 });
+  const owned = await prisma.trendIdea.count({
+    where: {
+      id: { in: parsed.data.ideaIds },
+      run: { workspaceId: session.workspace.id },
+    },
+  });
+  if (owned !== parsed.data.ideaIds.length) {
+    return NextResponse.json({ error: "One or more ideas are not in your workspace" }, { status: 403 });
   }
+
+  const service = new TrendResearchService(createEbayProvider());
+  const result = await service.enrichSoldCounts(parsed.data.ideaIds);
+  return NextResponse.json(result);
 }

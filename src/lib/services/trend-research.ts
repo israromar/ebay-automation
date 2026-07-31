@@ -11,6 +11,7 @@ export interface TrendResearchInput {
   criteria?: TrendResearchCriteria;
   /** Browse page size per keyword (before clustering). */
   searchLimit?: number;
+  workspaceId?: string;
 }
 
 async function resolveIdeaSoldCount(
@@ -42,12 +43,11 @@ export class TrendResearchService {
     }
 
     const criteria = { ...DEFAULT_TREND_CRITERIA, ...input.criteria };
-    const workspace = await ensureDefaultWorkspace();
+    const workspaceId = input.workspaceId ?? (await ensureDefaultWorkspace()).id;
     const searchLimit = Math.min(input.searchLimit ?? 50, 50);
-
     const run = await prisma.trendResearchRun.create({
       data: {
-        workspaceId: workspace.id,
+        workspaceId,
         keywordsJson: JSON.stringify(keywords),
         criteriaJson: JSON.stringify(criteria),
         status: "RUNNING",

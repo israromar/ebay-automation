@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
+import { candidateInWorkspace } from "@/lib/auth/workspace-access";
 import { prisma } from "@/lib/db";
 import { minorToDollarsInput } from "@/lib/domain/ebay-sold-history";
 import { fetchEbayPurchaseHistory } from "@/lib/providers/ebay-purchase-history";
 import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
-import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
-import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
+import { createAliExpressProvider, createEbayProvider, createVisualMatchProvider, loadWorkspaceRules } from "@/lib/services/providers";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -16,7 +17,14 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const { id } = await ctx.params;
+  if (!(await candidateInWorkspace(id, session.workspace.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const json = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
@@ -59,11 +67,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   let candidateUpdated = null;
   if (parsed.data.apply) {
     const orchestrator = new ScanOrchestrator({
-      aliexpress: new AliExpressManualImportProvider(sampleAliExpressCatalog()),
-      ebay: new EbayBrowseApiProvider({
-        clientId: process.env.EBAY_CLIENT_ID ?? "",
-        clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",
-      }),
+      aliexpress: createAliExpressProvider(),
+      ebay: createEbayProvider(),
+      visualMatch: createVisualMatchProvider(),
+      rules: await loadWorkspaceRules(session.workspace.id),
+      workspaceId: session.workspace.id,
     });
     try {
       candidateUpdated = await orchestrator.applyManualDemand(id, {

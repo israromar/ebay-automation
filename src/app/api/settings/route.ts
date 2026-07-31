@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { DEFAULT_RULES } from "@/lib/domain/types";
 import { z } from "zod";
@@ -30,42 +31,40 @@ const schema = z.object({
   googleSpreadsheetId: z.string().nullable().optional(),
 });
 
-async function getOrCreateSettings() {
-  let user = await prisma.user.findFirst();
-  if (!user) {
-    user = await prisma.user.create({
-      data: { email: "operator@local.dev", name: "Local Operator" },
-    });
-  }
-  let workspace = await prisma.workspace.findFirst({ where: { userId: user.id } });
-  if (!workspace) {
-    workspace = await prisma.workspace.create({
-      data: { name: "Default Workspace", userId: user.id, settings: { create: {} } },
-    });
-  }
+export async function GET() {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   let settings = await prisma.workspaceSettings.findUnique({
-    where: { workspaceId: workspace.id },
+    where: { workspaceId: session.workspace.id },
   });
   if (!settings) {
     settings = await prisma.workspaceSettings.create({
-      data: { workspaceId: workspace.id },
+      data: { workspaceId: session.workspace.id },
     });
   }
-  return settings;
-}
-
-export async function GET() {
-  const settings = await getOrCreateSettings();
   return NextResponse.json({ settings, defaults: DEFAULT_RULES });
 }
 
 export async function PUT(req: Request) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const json = await req.json();
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const current = await getOrCreateSettings();
+
+  let current = await prisma.workspaceSettings.findUnique({
+    where: { workspaceId: session.workspace.id },
+  });
+  if (!current) {
+    current = await prisma.workspaceSettings.create({
+      data: { workspaceId: session.workspace.id },
+    });
+  }
+
   const settings = await prisma.workspaceSettings.update({
     where: { id: current.id },
     data: parsed.data,

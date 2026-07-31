@@ -1,14 +1,26 @@
 import { NextResponse } from "next/server";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
 export async function GET(req: Request) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const { searchParams } = new URL(req.url);
   const runId = searchParams.get("runId") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
   const take = Math.min(Number(searchParams.get("limit") ?? 100), 200);
 
+  if (runId) {
+    const run = await prisma.trendResearchRun.findFirst({
+      where: { id: runId, workspaceId: session.workspace.id },
+    });
+    if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  }
+
   const ideas = await prisma.trendIdea.findMany({
     where: {
+      run: { workspaceId: session.workspace.id },
       ...(runId ? { runId } : {}),
       ...(status ? { status } : {}),
     },

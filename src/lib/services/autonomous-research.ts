@@ -41,14 +41,15 @@ export interface StartAutomationInput {
   highQualityMaxAeLandedCostRatio?: number;
   highQualityMinNetMarginPercent?: number;
   highQualityMinOrderCount?: number;
+  workspaceId?: string;
 }
 
 export class AutonomousResearchOrchestrator {
   async start(input: StartAutomationInput = {}) {
-    const workspace = await ensureDefaultWorkspace();
+    const workspaceId = input.workspaceId ?? (await ensureDefaultWorkspace()).id;
     const config: AutomationRunConfig = {
       ...DEFAULT_AUTOMATION_CONFIG,
-      ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && !Array.isArray(value))),
+      ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && !Array.isArray(value) && value !== input.workspaceId)),
       ...(input.destination ? { destination: input.destination } : {}),
       ...(input.market ? { market: input.market } : {}),
     };
@@ -73,7 +74,7 @@ export class AutonomousResearchOrchestrator {
     const project = await prisma.searchProject.create({
       data: {
         name: `Automation ${new Date().toISOString().slice(0, 16)}`,
-        workspaceId: workspace.id,
+        workspaceId,
         keywords: { create: [{ keyword: "automation" }] },
       },
     });
@@ -88,7 +89,7 @@ export class AutonomousResearchOrchestrator {
 
     const run = await prisma.automationRun.create({
       data: {
-        workspaceId: workspace.id,
+        workspaceId,
         status: "PENDING",
         configJson: JSON.stringify(config),
         capabilitiesJson: JSON.stringify(capabilities),
@@ -267,12 +268,13 @@ export class AutonomousResearchOrchestrator {
       throw new Error(`Run cannot be approved from status ${run.status}`);
     }
 
-    const rules = await loadWorkspaceRules();
+    const rules = await loadWorkspaceRules(run.workspaceId ?? undefined);
     const scan = new ScanOrchestrator({
       aliexpress: createAliExpressProvider(),
       ebay: createEbayProvider(),
       visualMatch: createVisualMatchProvider(),
       rules,
+      workspaceId: run.workspaceId ?? undefined,
     });
 
     const approvedIds: string[] = [];
@@ -352,19 +354,23 @@ export class AutonomousResearchOrchestrator {
       ? ((JSON.parse(approvedArtifact.payloadJson) as { candidateIds?: string[] }).candidateIds ?? [])
       : [];
 
-    const rules = await loadWorkspaceRules();
+    const rules = await loadWorkspaceRules(run.workspaceId ?? undefined);
     const scan = new ScanOrchestrator({
       aliexpress: createAliExpressProvider(),
       ebay: createEbayProvider(),
       visualMatch: createVisualMatchProvider(),
       rules,
+      workspaceId: run.workspaceId ?? undefined,
     });
     const exporter =
       config.destination === "google_sheets"
         ? new GoogleSheetsApiExporter({ spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID ?? "" })
         : new CsvExporter(path.join(process.cwd(), "poc-output", `automation-${runId}.csv`));
 
-    const result = await scan.exportApproved(exporter, approvedIds.length ? { candidateIds: approvedIds } : undefined);
+    const result = await scan.exportApproved(exporter, {
+      workspaceId: run.workspaceId ?? undefined,
+      ...(approvedIds.length ? { candidateIds: approvedIds } : {}),
+    });
 
     await this.saveArtifact(runId, "EXPORT", "export_result", result);
     await prisma.automationStageRun.updateMany({
@@ -402,8 +408,9 @@ export class AutonomousResearchOrchestrator {
     });
   }
 
-  async listRuns(limit = 20) {
+  async listRuns(limit = 20, workspaceId?: string) {
     return prisma.automationRun.findMany({
+      where: workspaceId ? { workspaceId } : undefined,
       orderBy: { createdAt: "desc" },
       take: limit,
       include: {
@@ -411,6 +418,11 @@ export class AutonomousResearchOrchestrator {
         _count: { select: { decisions: true, artifacts: true } },
       },
     });
+  }
+
+  private async runWorkspaceId(runId: string): Promise<string | undefined> {
+    const run = await prisma.automationRun.findUnique({ where: { id: runId }, select: { workspaceId: true } });
+    return run?.workspaceId ?? undefined;
   }
 
   private async executeStage(runId: string, stage: AutomationStage, config: AutomationRunConfig) {
@@ -461,10 +473,12 @@ export class AutonomousResearchOrchestrator {
     });
     if (!keywordArtifact) throw new Error("Missing keyword_set artifact");
     const { keywords } = JSON.parse(keywordArtifact.payloadJson) as { keywords: string[] };
+    const workspaceId = await this.runWorkspaceId(runId);
     const service = new TrendResearchService(createEbayProvider());
     const result = await service.run({
       keywords,
       searchLimit: config.searchLimit,
+      workspaceId,
       criteria: {
         topNPerKeyword: config.productsPerKeyword,
         ...(config.highQualityFilter ? { minEbayPriceMinor: config.highQualityMinEbayPriceMinor } : {}),
@@ -488,13 +502,15 @@ export class AutonomousResearchOrchestrator {
     });
     if (!ideaArtifact) throw new Error("Missing idea_ids artifact");
     const { ideaIds } = JSON.parse(ideaArtifact.payloadJson) as { ideaIds: string[] };
-    const rules = await loadWorkspaceRules();
+    const workspaceId = await this.runWorkspaceId(runId);
+    const rules = await loadWorkspaceRules(workspaceId);
     const effectiveRules = config.highQualityFilter ? withHighQualityRules(rules, resolveHighQualityThresholds(config)) : rules;
     const orchestrator = new ScanOrchestrator({
       aliexpress: createAliExpressProvider(),
       ebay: createEbayProvider(),
       visualMatch: createVisualMatchProvider(),
       rules: effectiveRules,
+      workspaceId,
     });
     const matched = await orchestrator.matchTrendIdeas(ideaIds.slice(0, config.topIdeas));
     const candidateIds = matched.candidates.map((candidate) => candidate.id);
@@ -514,7 +530,8 @@ export class AutonomousResearchOrchestrator {
     });
     if (!candidateArtifact) throw new Error("Missing candidate_ids artifact");
     const { candidateIds } = JSON.parse(candidateArtifact.payloadJson) as { candidateIds: string[] };
-    const rules = await loadWorkspaceRules();
+    const workspaceId = await this.runWorkspaceId(runId);
+    const rules = await loadWorkspaceRules(workspaceId);
     const candidates = await prisma.productCandidate.findMany({ where: { id: { in: candidateIds } } });
     const ideas = await prisma.trendIdea.findMany({ where: { productCandidateId: { in: candidateIds } } });
     const ideaByCandidate = new Map(ideas.map((idea) => [idea.productCandidateId!, idea.id]));

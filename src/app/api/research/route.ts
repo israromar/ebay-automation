@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
+import { assertResearchRunAllowed } from "@/lib/auth/usage-caps";
 import { prisma } from "@/lib/db";
 import { TrendResearchService } from "@/lib/services/trend-research";
 import { createEbayProvider } from "@/lib/services/providers";
@@ -20,18 +22,31 @@ const postSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const json = await req.json();
   const parsed = postSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
+
+  const cap = await assertResearchRunAllowed(session.workspace.id);
+  if (!cap.ok) {
+    return NextResponse.json({ error: cap.message }, { status: 429 });
+  }
+
   const service = new TrendResearchService(createEbayProvider());
-  const result = await service.run(parsed.data);
+  const result = await service.run({ ...parsed.data, workspaceId: session.workspace.id });
   return NextResponse.json(result);
 }
 
 export async function GET() {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+
   const runs = await prisma.trendResearchRun.findMany({
+    where: { workspaceId: session.workspace.id },
     orderBy: { startedAt: "desc" },
     take: 20,
     include: { _count: { select: { ideas: true } } },
