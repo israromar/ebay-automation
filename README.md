@@ -10,13 +10,16 @@ Automation platform that compares AliExpress sourcing with eBay demand and profi
 
 ## Stack
 
-Next.js 15, TypeScript, Prisma (SQLite locally; swap `DATABASE_URL` / provider for PostgreSQL in production), Tailwind, Zod, Playwright, Vitest.
+Next.js 15, TypeScript, Prisma on **Supabase Postgres**, Tailwind, Zod, Playwright, Vitest.
+
+Deploy notes: [`docs/deploy-supabase-vercel.md`](docs/deploy-supabase-vercel.md)
 
 ## Why these packages
 
 | Package                   | Why                                 | Alternative considered                     |
 | ------------------------- | ----------------------------------- | ------------------------------------------ |
 | Prisma                    | Typed schema + migrations           | Drizzle — similar; Prisma chosen for speed |
+| Supabase Postgres         | Hosted DB for local + Vercel        | SQLite — not suitable for Vercel           |
 | Zod                       | Boundary validation                 | Manual checks — weaker                     |
 | Playwright                | Browser tests + optional collectors | Puppeteer — Playwright preferred           |
 | googleapis                | Official Sheets API                 | Community MCP — not for production         |
@@ -27,8 +30,9 @@ Next.js 15, TypeScript, Prisma (SQLite locally; swap `DATABASE_URL` / provider f
 
 ```bash
 cp .env.example .env
+# Set DATABASE_URL + DIRECT_URL from Supabase Database settings
 npm install
-npx prisma db push
+npx prisma generate
 npx playwright install chromium
 npm test
 npm run poc
@@ -36,6 +40,8 @@ npm run dev
 ```
 
 Open http://localhost:3000
+
+Schema is applied on the linked Supabase project. See deploy doc for Vercel env vars.
 
 ## PoC
 

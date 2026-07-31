@@ -46,6 +46,10 @@ yarn-error.log*
 /playwright-report
 *.trace.zip
 
+# agent skill installs (local)
+/.agents
+
+
 # vercel
 .vercel
 
