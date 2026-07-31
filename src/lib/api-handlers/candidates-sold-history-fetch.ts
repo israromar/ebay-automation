@@ -8,9 +8,6 @@ import { ScanOrchestrator } from "@/lib/services/scan-orchestrator";
 import { createAliExpressProvider, createEbayProvider, createVisualMatchProvider, loadWorkspaceRules } from "@/lib/services/providers";
 import { z } from "zod";
 
-export const runtime = "nodejs";
-export const maxDuration = 60;
-
 const bodySchema = z.object({
   apply: z.boolean().optional(),
   windowDays: z.number().int().min(1).max(90).optional(),

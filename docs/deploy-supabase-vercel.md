@@ -30,9 +30,11 @@ Schema is already applied on Supabase via MCP migrations. Use `npx prisma migrat
 
 ### Vercel caveats for this app
 
+- **Hobby plan (12 serverless functions):** API routes are consolidated into a single catch-all (`src/app/api/[...path]/route.ts`) so deploys stay under the limit. Public URLs are unchanged (`/api/research`, etc.).
 - DINOv2 / ORT and long automation runs are heavy for default serverless timeouts.
 - Prefer keeping `npm run worker:tick` on a small always-on host or Vercel Cron + short ticks until a dedicated worker exists.
 - File-based SQLite (`dev.db`) is no longer used.
+- Set Auth env on Vercel too: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ALLOWED_EMAILS`.
 
 ## Security notes
 
