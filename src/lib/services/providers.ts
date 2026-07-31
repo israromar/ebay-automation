@@ -2,7 +2,6 @@ import { prisma } from "@/lib/db";
 import { DEFAULT_RULES, type QualificationRules } from "@/lib/domain/types";
 import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
 import { AliExpressOfficialApiProvider } from "@/lib/providers/aliexpress-official";
-import { Dinov2VisualMatchProvider } from "@/lib/providers/dinov2-visual-match";
 import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
 import type { AliExpressProvider, EbayProvider } from "@/lib/providers/types";
 import type { VisualMatchProvider } from "@/lib/providers/visual-match";
@@ -28,8 +27,11 @@ export function createEbayProvider(): EbayProvider {
   });
 }
 
+/** Lazy: avoids pulling ORT/transformers into light API routes. */
 export function createVisualMatchProvider(): VisualMatchProvider | undefined {
   if (process.env.VISUAL_MATCH_ENABLED === "false") return undefined;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Dinov2VisualMatchProvider } = require("@/lib/providers/dinov2-visual-match") as typeof import("@/lib/providers/dinov2-visual-match");
   return new Dinov2VisualMatchProvider();
 }
 

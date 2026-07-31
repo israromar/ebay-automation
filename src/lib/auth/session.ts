@@ -41,12 +41,17 @@ export async function requireSessionWorkspace(): Promise<SessionWorkspace | Next
     return NextResponse.json({ error: "Email not allowlisted" }, { status: 403 });
   }
 
-  const session = await ensureUserWorkspace({
-    supabaseUserId: authUser.id,
-    email: authUser.email,
-    name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
-  });
-  return session;
+  try {
+    const session = await ensureUserWorkspace({
+      supabaseUserId: authUser.id,
+      email: authUser.email,
+      name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+    });
+    return session;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `Workspace bootstrap failed: ${message}` }, { status: 500 });
+  }
 }
 
 export async function ensureUserWorkspace(input: {
