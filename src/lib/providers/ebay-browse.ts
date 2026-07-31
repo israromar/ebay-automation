@@ -128,8 +128,12 @@ export class EbayBrowseApiProvider implements EbayProvider {
       itemLocation?: { country?: string };
       categoryPath?: string;
       categoryId?: string;
+      estimatedAvailabilities?: Array<{ estimatedSoldQuantity?: number }>;
     };
     const now = new Date().toISOString();
+    const estimatedSoldQuantity = item.estimatedAvailabilities
+      ?.map((entry) => entry.estimatedSoldQuantity)
+      .find((value): value is number => typeof value === "number" && Number.isFinite(value));
     return {
       itemId: item.itemId,
       title: item.title,
@@ -144,12 +148,13 @@ export class EbayBrowseApiProvider implements EbayProvider {
       sellerUsername: item.seller?.username,
       sellerLocation: item.itemLocation?.country,
       categoryId: item.categoryId,
+      estimatedSoldQuantity,
       meta: {
         source: this.name,
         confidence: 0.98,
         collectedAt: now,
         completeness: "full",
-        warnings: [],
+        warnings: estimatedSoldQuantity == null ? ["estimatedSoldQuantity missing on item"] : [],
         rawRecordRef: item.itemId,
       },
     };
@@ -162,7 +167,37 @@ export class EbayBrowseApiProvider implements EbayProvider {
       if (insightsDemand.available) return insightsDemand;
     }
 
-    // Browse cannot supply sold history; Insights is Limited Release (often 403).
+    if (
+      process.env.EBAY_PURCHASE_HISTORY_FETCH_ENABLED !== "false" &&
+      process.env.EBAY_PURCHASE_HISTORY_COOKIE?.trim() &&
+      input.itemId
+    ) {
+      try {
+        const { fetchEbayPurchaseHistory } = await import("@/lib/providers/ebay-purchase-history");
+        const history = await fetchEbayPurchaseHistory({ itemIdOrUrl: input.itemId });
+        if (history.available) {
+          return {
+            available: true,
+            soldLast30Days: history.soldLast30Days,
+            avgCompletedSaleMinor: history.avgCompletedSaleMinor ?? undefined,
+            medianCompletedSaleMinor: history.medianCompletedSaleMinor ?? undefined,
+            source: `purchase_history:${history.source}`,
+            meta: {
+              source: this.name,
+              confidence: 0.7,
+              collectedAt: now,
+              completeness: "partial",
+              warnings: history.warnings,
+              rawRecordRef: history.evidenceUrl ?? input.itemId,
+            },
+          };
+        }
+      } catch {
+        /* purchase history is optional */
+      }
+    }
+
+    // Browse cannot supply verified 30-day sold history; Insights is Limited Release (often 403).
     return {
       available: false,
       source: "EbayBrowseApiProvider",
@@ -173,7 +208,7 @@ export class EbayBrowseApiProvider implements EbayProvider {
         collectedAt: now,
         completeness: "minimal",
         warnings: [
-          "Sold history requires Marketplace Insights access or manual validation on the candidate page",
+          "Sold history requires Marketplace Insights, purchase-history fetch, or manual validation",
           `insightsAccess=${this.insights.accessState}`,
         ],
       },

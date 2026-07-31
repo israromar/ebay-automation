@@ -40,6 +40,11 @@ Configured per run:
 
 - `topKeywords`, `productsPerKeyword`, `topIdeas`, `searchLimit`
 - `maxRuntimeMs` (default 15 minutes)
+- Optional `highQualityFilter` — when on:
+  - eBay discovery raises `minEbayPriceMinor` (default $25)
+  - SOURCE_MATCH uses stricter AE volume + net margin floors
+  - DECISION rejects unless AE landed cost ≤50% of eBay, margin ≥15%, AE orders ≥100
+  - AE “availability” uses `orderCount` / latest volume (API has no stock field)
 
 ## APIs
 

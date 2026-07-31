@@ -4,11 +4,32 @@ import { logInfo } from "@/lib/logger";
 import type { EbayProvider } from "@/lib/providers/types";
 import { ensureDefaultWorkspace } from "./providers";
 
+export type SoldCountSource = "insights" | "purchase_history" | "browse_estimate";
+
 export interface TrendResearchInput {
   keywords: string[];
   criteria?: TrendResearchCriteria;
   /** Browse page size per keyword (before clustering). */
   searchLimit?: number;
+}
+
+async function resolveIdeaSoldCount(
+  ebay: EbayProvider,
+  idea: { ebayItemId: string; title: string; searchKeyword: string },
+): Promise<{ soldLast30Days: number; soldCountSource: SoldCountSource } | null> {
+  // Browse getItem.estimatedSoldQuantity is the reliable triage signal (Insights is often 403).
+  // Verified last-30-day counts still come from Insights / purchase-history / manual demand.
+  void idea.searchKeyword;
+  void idea.title;
+  try {
+    const details = await ebay.getListingDetails(idea.ebayItemId);
+    if (typeof details.estimatedSoldQuantity === "number") {
+      return { soldLast30Days: details.estimatedSoldQuantity, soldCountSource: "browse_estimate" };
+    }
+  } catch {
+    /* leave empty */
+  }
+  return null;
 }
 
 export class TrendResearchService {
@@ -42,6 +63,12 @@ export class TrendResearchService {
         });
         const scored = scoreClustersForKeyword(keyword, listings, criteria);
         for (const idea of scored) {
+          const sold = await resolveIdeaSoldCount(this.ebay, {
+            ebayItemId: idea.ebayItemId,
+            title: idea.title,
+            searchKeyword: idea.searchKeyword,
+          });
+
           const created = await prisma.trendIdea.create({
             data: {
               runId: run.id,
@@ -58,6 +85,12 @@ export class TrendResearchService {
               priceMinMinor: idea.priceMinMinor,
               priceMaxMinor: idea.priceMaxMinor,
               priceMedianMinor: idea.priceMedianMinor,
+              ...(sold
+                ? {
+                    soldLast30Days: sold.soldLast30Days,
+                    soldCountSource: sold.soldCountSource,
+                  }
+                : {}),
               score: idea.score,
               status: "DISCOVERED",
               dataSource: "ebay_browse_proxy",
@@ -104,5 +137,36 @@ export class TrendResearchService {
       });
       throw e;
     }
+  }
+
+  /** Backfill sold counts for ideas that are still empty (Browse estimate / Insights). */
+  async enrichSoldCounts(ideaIds: string[]) {
+    const ideas = await prisma.trendIdea.findMany({
+      where: { id: { in: ideaIds } },
+    });
+    let updated = 0;
+    for (const idea of ideas) {
+      if (typeof idea.soldLast30Days === "number" && idea.soldCountSource && idea.soldCountSource !== "browse_estimate") {
+        continue;
+      }
+      const sold = await resolveIdeaSoldCount(this.ebay, {
+        ebayItemId: idea.ebayItemId,
+        title: idea.title,
+        searchKeyword: idea.searchKeyword ?? idea.title.slice(0, 80),
+      });
+      if (!sold) continue;
+      if (typeof idea.soldLast30Days === "number" && idea.soldCountSource === "browse_estimate" && sold.soldCountSource === "browse_estimate") {
+        if (idea.soldLast30Days === sold.soldLast30Days) continue;
+      }
+      await prisma.trendIdea.update({
+        where: { id: idea.id },
+        data: {
+          soldLast30Days: sold.soldLast30Days,
+          soldCountSource: sold.soldCountSource,
+        },
+      });
+      updated += 1;
+    }
+    return { updated, total: ideas.length };
   }
 }

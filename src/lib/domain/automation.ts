@@ -1,3 +1,5 @@
+import { evaluateHighQualityFilter, resolveHighQualityThresholds } from "@/lib/domain/high-quality-filter";
+
 export const AUTOMATION_STAGES = ["KEYWORDS", "EBAY_DISCOVERY", "SOURCE_MATCH", "DECISION", "APPROVAL", "EXPORT"] as const;
 
 export type AutomationStage = (typeof AUTOMATION_STAGES)[number];
@@ -31,6 +33,12 @@ export interface AutomationRunConfig {
   maxRuntimeMs: number;
   destination: "csv" | "google_sheets";
   market: string;
+  /** Prefer high eBay price + cheap AE + high margin + high AE volume. Off by default. */
+  highQualityFilter: boolean;
+  highQualityMinEbayPriceMinor: number;
+  highQualityMaxAeLandedCostRatio: number;
+  highQualityMinNetMarginPercent: number;
+  highQualityMinOrderCount: number;
 }
 
 export const DEFAULT_AUTOMATION_CONFIG: AutomationRunConfig = {
@@ -41,6 +49,11 @@ export const DEFAULT_AUTOMATION_CONFIG: AutomationRunConfig = {
   maxRuntimeMs: 15 * 60_000,
   destination: "csv",
   market: "US",
+  highQualityFilter: false,
+  highQualityMinEbayPriceMinor: 2500,
+  highQualityMaxAeLandedCostRatio: 0.5,
+  highQualityMinNetMarginPercent: 15,
+  highQualityMinOrderCount: 100,
 };
 
 export interface AutomationCapabilities {
@@ -108,6 +121,15 @@ export function classifyAutomationDecision(input: {
   demandVerified?: boolean | null;
   rejectionReasonsJson?: string | null;
   minimumMatchConfidence: number;
+  ebayCurrentPriceMinor?: number | null;
+  aliexpressPriceMinor?: number | null;
+  netMarginPercent?: number | null;
+  orderCount?: number | null;
+  highQualityFilter?: boolean;
+  highQualityMinEbayPriceMinor?: number;
+  highQualityMaxAeLandedCostRatio?: number;
+  highQualityMinNetMarginPercent?: number;
+  highQualityMinOrderCount?: number;
 }): { outcome: AutomationDecisionOutcome; reasons: string[] } {
   const reasons = parseJsonStringArray(input.rejectionReasonsJson);
   if (!input.aliexpressProductId || input.status === "ALIEXPRESS_REJECTED") {
@@ -118,6 +140,29 @@ export function classifyAutomationDecision(input: {
   }
   if (["UNPROFITABLE", "DEMAND_NOT_VERIFIED"].includes(input.status)) {
     return { outcome: "REJECTED", reasons: reasons.length ? reasons : [input.status] };
+  }
+  if (input.highQualityFilter) {
+    const hqReasons = evaluateHighQualityFilter(
+      {
+        ebayCurrentPriceMinor: input.ebayCurrentPriceMinor,
+        aliexpressPriceMinor: input.aliexpressPriceMinor,
+        aliexpressShippingMinor: input.aliexpressShippingMinor,
+        netMarginPercent: input.netMarginPercent,
+        orderCount: input.orderCount,
+      },
+      resolveHighQualityThresholds({
+        highQualityMinEbayPriceMinor: input.highQualityMinEbayPriceMinor,
+        highQualityMaxAeLandedCostRatio: input.highQualityMaxAeLandedCostRatio,
+        highQualityMinNetMarginPercent: input.highQualityMinNetMarginPercent,
+        highQualityMinOrderCount: input.highQualityMinOrderCount,
+      }),
+    );
+    if (hqReasons.length > 0) {
+      return {
+        outcome: "REJECTED",
+        reasons: [...new Set([...reasons, "BELOW_HIGH_QUALITY_BAR", ...hqReasons])],
+      };
+    }
   }
   if (input.aliexpressShippingMinor == null || reasons.includes("MISSING_SHIPPING_COST")) {
     return { outcome: "NEEDS_EVIDENCE", reasons: [...new Set([...reasons, "MISSING_SHIPPING_COST"])] };

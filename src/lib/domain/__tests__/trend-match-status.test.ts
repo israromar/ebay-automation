@@ -38,15 +38,15 @@ describe("deriveTrendIdeaMatchStatus", () => {
     ).toBe("REJECTED");
   });
 
-  it("keeps a qualified AE match despite unrelated manual demand checks", () => {
+  it("rejects when below the optional high-quality bar", () => {
     expect(
       deriveTrendIdeaMatchStatus({
         aliexpressProductId: "ae-1",
-        matchConfidence: 82,
-        candidateStatus: "NEEDS_MANUAL_VALIDATION",
-        rejectionReasonsJson: JSON.stringify(["EBAY_SOLD_HISTORY_UNAVAILABLE", "MISSING_SHIPPING_COST"]),
+        matchConfidence: 90,
+        candidateStatus: "UNPROFITABLE",
+        rejectionReasonsJson: JSON.stringify(["BELOW_HIGH_QUALITY_BAR", "HIGH_QUALITY_MARGIN_TOO_LOW"]),
         minimumMatchConfidence: 70,
       }),
-    ).toBe("AE_MATCHED");
+    ).toBe("REJECTED");
   });
 });

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const MAX_KEYWORDS = 10;
-const RESEARCH_STATE_KEY = "ebay-automation:research-state:v1";
+const RESEARCH_STATE_KEY = "ebay-automation:research-state:v2";
+const HIGH_QUALITY_MIN_EBAY_DOLLARS = 25;
 
 interface TrendLibraryKeyword {
   id: string;
@@ -51,6 +52,9 @@ interface TrendIdea {
   score: number;
   status: string;
   productCandidateId: string | null;
+  soldLast30Days?: number | null;
+  soldCountSource?: string | null;
+  demandVerified?: boolean;
   aeMatch: {
     title: string | null;
     imageUrl: string | null;
@@ -72,11 +76,12 @@ interface PersistedResearchState {
   statusFilter: string;
   selectedIds: string[];
   recentlyProcessedIds: string[];
+  highQualityFilter?: boolean;
 }
 
 function readPersistedResearchState(): PersistedResearchState | null {
   try {
-    const raw = window.localStorage.getItem(RESEARCH_STATE_KEY);
+    const raw = window.localStorage.getItem(RESEARCH_STATE_KEY) ?? window.localStorage.getItem("ebay-automation:research-state:v1");
     return raw ? (JSON.parse(raw) as PersistedResearchState) : null;
   } catch {
     return null;
@@ -174,6 +179,7 @@ export default function ResearchPage() {
   const [trendLibrary, setTrendLibrary] = useState<TrendLibrary | null>(null);
   const [trendNicheFilter, setTrendNicheFilter] = useState("");
   const [trendsBusy, setTrendsBusy] = useState(false);
+  const [highQualityFilter, setHighQualityFilter] = useState(false);
 
   const recentKeywords = useMemo(() => collectRecentKeywords(runs), [runs]);
   const keywordSet = useMemo(() => new Set(keywords.map(normalizeKeyword)), [keywords]);
@@ -285,6 +291,7 @@ export default function ResearchPage() {
         setSearchLimit(saved.searchLimit ?? "40");
         setSelectedRunId(runId);
         setStatusFilter(status);
+        setHighQualityFilter(Boolean(saved.highQualityFilter));
       }
 
       const loadedIdeas = await loadIdeas(runId || undefined, status || undefined);
@@ -320,9 +327,11 @@ export default function ResearchPage() {
       statusFilter,
       selectedIds: [...selected],
       recentlyProcessedIds: [...recentlyProcessed],
+      highQualityFilter,
     });
   }, [
     draft,
+    highQualityFilter,
     keywords,
     maxListings,
     maxPrice,
@@ -358,6 +367,12 @@ export default function ResearchPage() {
     setBusy(true);
     setMessage(null);
     try {
+      const requestedMin = Math.round(Number(minPrice) * 100) || 500;
+      const hqMin = HIGH_QUALITY_MIN_EBAY_DOLLARS * 100;
+      const effectiveMin = highQualityFilter ? Math.max(requestedMin, hqMin) : requestedMin;
+      if (highQualityFilter && effectiveMin > requestedMin) {
+        setMinPrice(String(HIGH_QUALITY_MIN_EBAY_DOLLARS));
+      }
       const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -365,7 +380,7 @@ export default function ResearchPage() {
           keywords: keywordList,
           searchLimit: Number(searchLimit) || 40,
           criteria: {
-            minEbayPriceMinor: Math.round(Number(minPrice) * 100) || 500,
+            minEbayPriceMinor: effectiveMin,
             maxEbayPriceMinor: Math.round(Number(maxPrice) * 100) || 15000,
             minActiveListings: Number(minListings) || 2,
             maxActiveListings: Number(maxListings) || 40,
@@ -401,7 +416,7 @@ export default function ResearchPage() {
       const res = await fetch("/api/research/ideas/match", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ideaIds: requestedIds }),
+        body: JSON.stringify({ ideaIds: requestedIds, highQualityFilter }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -421,6 +436,38 @@ export default function ResearchPage() {
       }
       const requested = new Set(requestedIds);
       setMatchSummary(resultIdeas.filter((idea) => requested.has(idea.id)));
+      const hqNote =
+        highQualityFilter && typeof json.highQualityRejected === "number" && json.highQualityRejected > 0
+          ? ` High-margin filter rejected ${json.highQualityRejected}.`
+          : highQualityFilter
+            ? " High-margin filter on."
+            : "";
+      setMessage(`Matched ${requestedIds.length} idea(s).${hqNote}`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshSoldCounts() {
+    const ids = (selected.size > 0 ? [...selected] : ideas.map((idea) => idea.id)).slice(0, 40);
+    if (ids.length === 0) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/research/ideas/enrich-sold", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ideaIds: ids }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setMessage(JSON.stringify(json.error ?? json));
+        return;
+      }
+      await loadIdeas(selectedRunId || undefined, statusFilter);
+      setMessage(`Updated sold counts on ${json.updated ?? 0} of ${json.total ?? ids.length} idea(s).`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -696,6 +743,16 @@ export default function ResearchPage() {
             />
           </label>
         </div>
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={highQualityFilter} onChange={(e) => setHighQualityFilter(e.target.checked)} />
+          <span>
+            <span className="font-medium text-slate-900">High-margin opportunity filter</span>
+            <span className="mt-1 block text-slate-600">
+              Optional. Raises min eBay price to ${HIGH_QUALITY_MIN_EBAY_DOLLARS}+ on research, then AE match requires cheap landed cost
+              (≤50% of eBay), ≥15% net margin, and 100+ AE orders.
+            </span>
+          </span>
+        </label>
         <button
           type="submit"
           disabled={busy}
@@ -792,7 +849,15 @@ export default function ResearchPage() {
           onClick={matchSelected}
           className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
         >
-          Find AE match ({selected.size})
+          Find AE match ({selected.size}){highQualityFilter ? " · HQ" : ""}
+        </button>
+        <button
+          type="button"
+          disabled={busy || ideas.length === 0}
+          onClick={refreshSoldCounts}
+          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Refresh sold counts
         </button>
       </div>
 
@@ -808,6 +873,12 @@ export default function ResearchPage() {
               <th className="px-3 py-2">Keyword</th>
               <th className="px-3 py-2">Price / band</th>
               <th className="px-3 py-2">Active</th>
+              <th
+                className="px-3 py-2"
+                title="life est = Browse lifetime estimated sold on this listing (not purchase-history last 30 days). Verified 30d needs Insights or purchase-history cookie."
+              >
+                Sold
+              </th>
               <th className="px-3 py-2">Visual match</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Actions</th>
@@ -816,7 +887,7 @@ export default function ResearchPage() {
           <tbody>
             {ideas.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
                   No ideas yet. Run research with seed keywords.
                 </td>
               </tr>
@@ -869,6 +940,37 @@ export default function ResearchPage() {
                   </div>
                 </td>
                 <td className="px-3 py-3 tabular-nums">{idea.activeListingCount}</td>
+                <td className="px-3 py-3 tabular-nums">
+                  {typeof idea.soldLast30Days === "number" ? (
+                    <span
+                      className={
+                        idea.soldLast30Days >= 5
+                          ? "font-semibold text-emerald-800"
+                          : idea.soldLast30Days > 0
+                            ? "font-medium text-slate-800"
+                            : "text-slate-500"
+                      }
+                      title={
+                        idea.soldCountSource === "browse_estimate"
+                          ? "Browse estimated lifetime sold on this listing — NOT the last-30-day count from purchase history"
+                          : idea.soldCountSource === "purchase_history"
+                            ? "From eBay purchase history (last ~30 days)"
+                            : idea.soldCountSource === "insights"
+                              ? "From Marketplace Insights (last ~30 days)"
+                              : "Sold count"
+                      }
+                    >
+                      {idea.soldLast30Days}
+                      {idea.soldCountSource === "browse_estimate" ? (
+                        <span className="ml-1 text-[10px] font-normal uppercase tracking-wide text-slate-400">life est</span>
+                      ) : null}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400" title="Sold count not fetched yet — use Refresh sold">
+                      —
+                    </span>
+                  )}
+                </td>
                 <td className="min-w-28 px-3 py-3">
                   {idea.aeMatch?.visualAvailable && idea.aeMatch.visualScore != null ? (
                     <div title="DINOv2 image similarity score">

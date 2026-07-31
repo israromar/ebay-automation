@@ -107,6 +107,7 @@ export default function AutomationPage() {
   const [topKeywords, setTopKeywords] = useState(5);
   const [topIdeas, setTopIdeas] = useState(10);
   const [destination, setDestination] = useState<"csv" | "google_sheets">("csv");
+  const [highQualityFilter, setHighQualityFilter] = useState(false);
 
   const loadRuns = useCallback(async () => {
     try {
@@ -171,7 +172,14 @@ export default function AutomationPage() {
       const res = await fetch("/api/automation/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topKeywords, topIdeas, destination, productsPerKeyword: 8, searchLimit: 30 }),
+        body: JSON.stringify({
+          topKeywords,
+          topIdeas,
+          destination,
+          productsPerKeyword: 8,
+          searchLimit: 30,
+          highQualityFilter,
+        }),
       });
       const json = await readJsonResponse<{ run?: Run; error?: unknown }>(res);
       if (!res.ok || !json.run) throw new Error(json.error ? JSON.stringify(json.error) : "Failed to start");
@@ -307,6 +315,22 @@ export default function AutomationPage() {
           </select>
         </label>
       </section>
+
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={highQualityFilter}
+          onChange={(event) => setHighQualityFilter(event.target.checked)}
+        />
+        <span>
+          <span className="font-medium text-slate-900">High-margin opportunity filter</span>
+          <span className="mt-1 block text-slate-600">
+            Optional. Prefers higher eBay prices ($25+), cheap AE landed cost (≤50% of eBay), net margin ≥15%, and high AE volume (100+
+            orders). Baseline matching stays unchanged when off.
+          </span>
+        </span>
+      </label>
 
       {capabilities ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">

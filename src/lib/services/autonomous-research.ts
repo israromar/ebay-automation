@@ -1,5 +1,6 @@
 import path from "path";
 import { prisma } from "@/lib/db";
+import { resolveHighQualityThresholds, withHighQualityRules } from "@/lib/domain/high-quality-filter";
 import {
   AUTOMATION_STAGES,
   classifyAutomationDecision,
@@ -35,6 +36,11 @@ export interface StartAutomationInput {
   destination?: "csv" | "google_sheets";
   market?: string;
   keywords?: string[];
+  highQualityFilter?: boolean;
+  highQualityMinEbayPriceMinor?: number;
+  highQualityMaxAeLandedCostRatio?: number;
+  highQualityMinNetMarginPercent?: number;
+  highQualityMinOrderCount?: number;
 }
 
 export class AutonomousResearchOrchestrator {
@@ -51,6 +57,15 @@ export class AutonomousResearchOrchestrator {
     if (typeof input.topIdeas === "number") config.topIdeas = input.topIdeas;
     if (typeof input.searchLimit === "number") config.searchLimit = input.searchLimit;
     if (typeof input.maxRuntimeMs === "number") config.maxRuntimeMs = input.maxRuntimeMs;
+    if (typeof input.highQualityFilter === "boolean") config.highQualityFilter = input.highQualityFilter;
+    if (typeof input.highQualityMinEbayPriceMinor === "number") config.highQualityMinEbayPriceMinor = input.highQualityMinEbayPriceMinor;
+    if (typeof input.highQualityMaxAeLandedCostRatio === "number") {
+      config.highQualityMaxAeLandedCostRatio = input.highQualityMaxAeLandedCostRatio;
+    }
+    if (typeof input.highQualityMinNetMarginPercent === "number") {
+      config.highQualityMinNetMarginPercent = input.highQualityMinNetMarginPercent;
+    }
+    if (typeof input.highQualityMinOrderCount === "number") config.highQualityMinOrderCount = input.highQualityMinOrderCount;
 
     const capabilities = detectAutomationCapabilities();
     const progress = emptyProgress();
@@ -407,7 +422,7 @@ export class AutonomousResearchOrchestrator {
       case "SOURCE_MATCH":
         return this.stageSourceMatch(runId, config);
       case "DECISION":
-        return this.stageDecision(runId);
+        return this.stageDecision(runId, config);
       case "APPROVAL":
         return { waiting: true, progressCurrent: 0, progressTotal: 1 };
       case "EXPORT":
@@ -450,7 +465,10 @@ export class AutonomousResearchOrchestrator {
     const result = await service.run({
       keywords,
       searchLimit: config.searchLimit,
-      criteria: { topNPerKeyword: config.productsPerKeyword },
+      criteria: {
+        topNPerKeyword: config.productsPerKeyword,
+        ...(config.highQualityFilter ? { minEbayPriceMinor: config.highQualityMinEbayPriceMinor } : {}),
+      },
     });
     const ideaIds = result.ideas
       .slice()
@@ -471,11 +489,12 @@ export class AutonomousResearchOrchestrator {
     if (!ideaArtifact) throw new Error("Missing idea_ids artifact");
     const { ideaIds } = JSON.parse(ideaArtifact.payloadJson) as { ideaIds: string[] };
     const rules = await loadWorkspaceRules();
+    const effectiveRules = config.highQualityFilter ? withHighQualityRules(rules, resolveHighQualityThresholds(config)) : rules;
     const orchestrator = new ScanOrchestrator({
       aliexpress: createAliExpressProvider(),
       ebay: createEbayProvider(),
       visualMatch: createVisualMatchProvider(),
-      rules,
+      rules: effectiveRules,
     });
     const matched = await orchestrator.matchTrendIdeas(ideaIds.slice(0, config.topIdeas));
     const candidateIds = matched.candidates.map((candidate) => candidate.id);
@@ -488,7 +507,7 @@ export class AutonomousResearchOrchestrator {
     return { candidateIds, progressCurrent: candidateIds.length, progressTotal: ideaIds.length };
   }
 
-  private async stageDecision(runId: string) {
+  private async stageDecision(runId: string, config: AutomationRunConfig) {
     const candidateArtifact = await prisma.automationArtifact.findFirst({
       where: { runId, kind: "candidate_ids" },
       orderBy: { createdAt: "desc" },
@@ -513,6 +532,15 @@ export class AutonomousResearchOrchestrator {
         demandVerified: candidate.demandVerified,
         rejectionReasonsJson: candidate.rejectionReasonsJson,
         minimumMatchConfidence: rules.minimumMatchConfidence,
+        ebayCurrentPriceMinor: candidate.ebayCurrentPriceMinor,
+        aliexpressPriceMinor: candidate.aliexpressPriceMinor,
+        netMarginPercent: candidate.netMarginPercent,
+        orderCount: candidate.orderCount,
+        highQualityFilter: config.highQualityFilter,
+        highQualityMinEbayPriceMinor: config.highQualityMinEbayPriceMinor,
+        highQualityMaxAeLandedCostRatio: config.highQualityMaxAeLandedCostRatio,
+        highQualityMinNetMarginPercent: config.highQualityMinNetMarginPercent,
+        highQualityMinOrderCount: config.highQualityMinOrderCount,
       });
       if (classified.outcome === "READY_FOR_APPROVAL") ready += 1;
       if (classified.outcome === "NEEDS_EVIDENCE") needsEvidence += 1;
@@ -530,9 +558,12 @@ export class AutonomousResearchOrchestrator {
             aliexpressProductId: candidate.aliexpressProductId,
             aliexpressShippingMinor: candidate.aliexpressShippingMinor,
             demandVerified: candidate.demandVerified,
+            ebayCurrentPriceMinor: candidate.ebayCurrentPriceMinor,
+            aliexpressPriceMinor: candidate.aliexpressPriceMinor,
             netMarginPercent: candidate.netMarginPercent,
             orderCount: candidate.orderCount,
             rating: candidate.rating,
+            highQualityFilter: config.highQualityFilter,
           }),
         },
       });

@@ -31,6 +31,11 @@ export const REJECTION_CODES = [
   "MISSING_SHIPPING_COST",
   "STALE_DATA",
   "MANUAL_INTERVENTION_REQUIRED",
+  "HIGH_QUALITY_EBAY_PRICE_TOO_LOW",
+  "HIGH_QUALITY_SOURCE_COST_RATIO_HIGH",
+  "HIGH_QUALITY_MARGIN_TOO_LOW",
+  "HIGH_QUALITY_AE_VOLUME_TOO_LOW",
+  "BELOW_HIGH_QUALITY_BAR",
 ] as const;
 
 export type RejectionCode = (typeof REJECTION_CODES)[number];
@@ -87,6 +92,8 @@ export interface EbayListing {
   categoryId?: string;
   brand?: string;
   model?: string;
+  /** Browse getItem estimated lifetime sold — not a verified 30-day count. */
+  estimatedSoldQuantity?: number;
   meta: ProviderMeta;
 }
 

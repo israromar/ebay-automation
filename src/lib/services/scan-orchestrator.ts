@@ -248,6 +248,7 @@ export class ScanOrchestrator {
             status: ideaStatus,
             productCandidateId: candidate.id,
             rejectionReasonsJson: candidate.rejectionReasonsJson,
+            ...(typeof candidate.soldLast30Days === "number" ? { soldLast30Days: candidate.soldLast30Days } : {}),
           },
         });
         candidates.push(candidate);

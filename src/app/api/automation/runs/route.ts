@@ -17,6 +17,11 @@ const startSchema = z.object({
   destination: z.enum(["csv", "google_sheets"]).optional(),
   market: z.string().min(2).max(8).optional(),
   keywords: z.array(z.string().min(1)).max(20).optional(),
+  highQualityFilter: z.boolean().optional(),
+  highQualityMinEbayPriceMinor: z.number().int().min(500).max(100_000).optional(),
+  highQualityMaxAeLandedCostRatio: z.number().min(0.05).max(0.95).optional(),
+  highQualityMinNetMarginPercent: z.number().min(5).max(80).optional(),
+  highQualityMinOrderCount: z.number().int().min(10).max(100_000).optional(),
 });
 
 export async function GET() {

@@ -185,6 +185,8 @@ model TrendIdea {
   priceMinMinor        Int?
   priceMaxMinor        Int?
   priceMedianMinor     Int?
+  soldLast30Days       Int?
+  soldCountSource      String?
   score                Float
   status               String            @default("DISCOVERED")
   dataSource           String            @default("ebay_browse_proxy")

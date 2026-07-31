@@ -16,6 +16,8 @@ export async function GET(req: Request) {
       productCandidate: {
         select: {
           matchConfidence: true,
+          soldLast30Days: true,
+          demandVerified: true,
           aliexpressProducts: {
             select: { title: true, imageUrl: true },
             orderBy: { collectedAt: "desc" },
@@ -51,8 +53,18 @@ export async function GET(req: Request) {
       }
     }
 
+    const soldLast30Days =
+      typeof idea.soldLast30Days === "number"
+        ? idea.soldLast30Days
+        : typeof productCandidate?.soldLast30Days === "number"
+          ? productCandidate.soldLast30Days
+          : null;
+
     return {
       ...idea,
+      soldLast30Days,
+      soldCountSource: idea.soldCountSource ?? null,
+      demandVerified: productCandidate?.demandVerified ?? false,
       aeMatch: productCandidate
         ? {
             title: productCandidate.aliexpressProducts[0]?.title ?? null,

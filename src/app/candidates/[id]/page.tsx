@@ -98,6 +98,7 @@ export default function CandidateDetailPage() {
   const [evidence, setEvidence] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [fetchBusy, setFetchBusy] = useState(false);
 
   async function load() {
     const res = await fetch(`/api/candidates/${params.id}`);
@@ -127,6 +128,51 @@ export default function CandidateDetailPage() {
       soldSearch: buildEbaySoldSearchUrl(keyword),
     };
   }, [candidate]);
+
+  async function fetchSoldHistory() {
+    setMsg("");
+    setFetchBusy(true);
+    try {
+      const res = await fetch(`/api/candidates/${params.id}/sold-history/fetch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apply: false }),
+      });
+      const json = await res.json();
+      const form = json.form as
+        | {
+            soldLast30Days?: number;
+            avgCompletedSaleDollars?: string;
+            medianCompletedSaleDollars?: string;
+            evidenceUrl?: string | null;
+          }
+        | undefined;
+      if (form) {
+        if (typeof form.soldLast30Days === "number") setSold(String(form.soldLast30Days));
+        if (form.avgCompletedSaleDollars) setAvgSale(form.avgCompletedSaleDollars);
+        if (form.medianCompletedSaleDollars) setMedianSale(form.medianCompletedSaleDollars);
+        if (form.evidenceUrl) setEvidence(form.evidenceUrl);
+      }
+      if (!res.ok || !json.available) {
+        const reason = String(json.reason ?? json.error ?? "fetch_failed");
+        if (reason === "login_required") {
+          setMsg(
+            "eBay requires sign-in for purchase history. Set EBAY_PURCHASE_HISTORY_COOKIE in .env (Cookie from a logged-in browser), or open the history link and enter counts manually.",
+          );
+        } else {
+          setMsg(`Could not fetch sold history (${reason}). Open the history page manually or try again.`);
+        }
+        return;
+      }
+      const inWindow = Number(json.history?.soldLast30Days ?? form?.soldLast30Days ?? 0);
+      const rows = Number(json.purchaseCount ?? 0);
+      setMsg(
+        `Fetched ${rows} purchase row(s) via ${String(json.source)}; ${inWindow} unit(s) in last 30 days. Review and click Apply demand.`,
+      );
+    } finally {
+      setFetchBusy(false);
+    }
+  }
 
   async function submitDemand() {
     setMsg("");
@@ -268,8 +314,8 @@ export default function CandidateDetailPage() {
         {hasValidatedAe ? (
           hasKnownShipping ? (
             <p className="mt-1 text-slate-700">
-              Browse API cannot supply sold counts. Open eBay sold history while logged in, then enter the numbers here. Approval requires
-              verified demand.
+              Browse API cannot supply sold counts. Use Fetch sold history to parse the purchase-history page, or open it manually
+              while logged in. Approval requires verified demand.
             </p>
           ) : (
             <p className="mt-1 font-medium text-amber-800">
@@ -283,12 +329,20 @@ export default function CandidateDetailPage() {
         )}
 
         <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy || fetchBusy || !soldHistoryLinks.purchaseHistory}
+            onClick={fetchSoldHistory}
+            className="rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {fetchBusy ? "Fetching…" : "Fetch sold history (last 30d)"}
+          </button>
           {soldHistoryLinks.purchaseHistory ? (
             <a
               href={soldHistoryLinks.purchaseHistory}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50"
             >
               Open listing sold history
             </a>
@@ -313,9 +367,9 @@ export default function CandidateDetailPage() {
         </div>
 
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-slate-700">
-          <li>Click “Open listing sold history” (sign in to eBay if prompted).</li>
-          <li>Count sales in the last ~30 days and note typical sold price.</li>
-          <li>Enter sold count + prices below and apply.</li>
+          <li>Click “Fetch sold history” to parse the purchase-history page (falls back to manual if eBay requires login).</li>
+          <li>Review autofilled sold count + prices, or open the history link and enter them yourself.</li>
+          <li>Click Apply demand when the numbers look right.</li>
         </ol>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -362,7 +416,7 @@ export default function CandidateDetailPage() {
         <div className="mt-3">
           <button
             type="button"
-            disabled={busy || !hasValidatedAe}
+            disabled={busy || fetchBusy || !hasValidatedAe}
             onClick={submitDemand}
             className="rounded-md bg-teal-700 px-4 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
