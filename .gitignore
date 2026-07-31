@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# ORT WASM CWD fallbacks created at runtime for Next.js (see ort-wasm-assets.mjs)
+/ort-wasm-simd-threaded.mjs
+/ort-wasm-simd-threaded.wasm
+
 # debug
 npm-debug.log*
 yarn-debug.log*

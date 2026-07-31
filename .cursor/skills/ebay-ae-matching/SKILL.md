@@ -47,7 +47,8 @@ When the user says a match is wrong, classify first:
 12. **Do not hide retrieval evidence.** Persist and display top evaluated AE alternatives with match, supplier, attribute, and profitability rejection reasons.
 13. **Validate critical numeric attributes.** Pack size, grid/cavity count, capacity, model, and similar explicit quantities override generic title overlap (for example 37-grid ≠ 148-grid).
 14. **Image search expands retrieval; DINOv2 only reranks.** Use the official Affiliate image-search API when authorized, union its hits with keyword results, and retain keyword fallback. Never claim DINOv2 can recover a product absent from the pool.
-15. **Unknown AE shipping is not free.** Missing `shippingMinor` must stay null, force `MISSING_SHIPPING_COST` / manual review, and never inflate profit by treating shipping as `$0`.
+15. **Advanced Affiliates expands retrieval too.** When Active, union `hotproduct.query` and `product.smartmatch` with keyword `product.query` before ranking. Image search remains a separate permission.
+16. **Unknown AE shipping is not free.** Missing `shippingMinor` must stay null, force `MISSING_SHIPPING_COST` / manual review, and never inflate profit by treating shipping as `$0`.
 
 ## Change checklist
 
@@ -80,6 +81,7 @@ Matching change:
 - Visual: `src/lib/domain/visual-matching.ts`, `src/lib/providers/dinov2-visual-match.ts`
 - AE API: `src/lib/providers/aliexpress-official.ts`
 - Product validity invariants: `docs/research/matching-validity.md`
+- One-button automation: `src/lib/services/autonomous-research.ts`, `src/app/automation/page.tsx`, `docs/research/autonomous-research.md`
 
 ## Judgement traps (do not repeat)
 
@@ -87,7 +89,7 @@ Matching change:
 - Treating “Needs review” as acceptable for inverted AE > eBay economics
 - Defaulting unknown pack quantity to `1` (makes generics falsely match kits)
 - Stripping digits/`pcs` from every search token and never re-injecting quantity
-- Making visual mandatory while ORT/WASM is broken in Next → zero AE matches
+- Making visual mandatory while ORT/WASM is broken in Next → zero AE matches (bootstrap via `register-ort-loader.mjs` / `instrumentation.ts`; see lessons §3)
 - Claiming success from unit tests alone when the bug is affiliate retrieval/sort
 - Assuming blank AE fields mean retrieval returned zero products
 - Letting manual demand validation bypass source matching and supplier qualification

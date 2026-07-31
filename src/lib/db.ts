@@ -14,12 +14,20 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
     trendResearchRun?: { findMany?: unknown };
     trendKeyword?: { findMany?: unknown };
     trendKeywordSnapshot?: { findFirst?: unknown };
+    automationRun?: { findMany?: unknown };
+    automationStageRun?: { findMany?: unknown };
+    automationArtifact?: { findFirst?: unknown };
+    automationDecision?: { findMany?: unknown };
   };
   return (
     typeof c.trendIdea?.findMany === "function" &&
     typeof c.trendResearchRun?.findMany === "function" &&
     typeof c.trendKeyword?.findMany === "function" &&
-    typeof c.trendKeywordSnapshot?.findFirst === "function"
+    typeof c.trendKeywordSnapshot?.findFirst === "function" &&
+    typeof c.automationRun?.findMany === "function" &&
+    typeof c.automationStageRun?.findMany === "function" &&
+    typeof c.automationArtifact?.findFirst === "function" &&
+    typeof c.automationDecision?.findMany === "function"
   );
 }
 

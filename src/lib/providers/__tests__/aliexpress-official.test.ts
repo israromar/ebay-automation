@@ -72,3 +72,90 @@ describe("AliExpressOfficialApiProvider image search", () => {
     expect(imageFile.type).toBe("image/jpeg");
   });
 });
+
+describe("AliExpressOfficialApiProvider advanced APIs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps smartmatch recommendations", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            aliexpress_affiliate_product_smartmatch_response: {
+              resp_result: {
+                result: {
+                  products: {
+                    product: [
+                      {
+                        product_id: "3256806145778732",
+                        product_title: "Over Door Neck Traction Device",
+                        target_sale_price: "12.50",
+                        lastest_volume: 1200,
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const provider = new AliExpressOfficialApiProvider({
+      appKey: "app-key",
+      appSecret: "app-secret",
+      trackingId: "tracking-id",
+    });
+    const products = await provider.searchSmartMatch({ keywords: "neck traction", limit: 10 });
+    expect(products).toHaveLength(1);
+    expect(products[0]).toMatchObject({
+      productId: "3256806145778732",
+      priceMinor: 1250,
+    });
+    expect(products[0].meta.warnings).toContain("retrieved_by_smartmatch");
+  });
+
+  it("maps hotproduct results", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            aliexpress_affiliate_hotproduct_query_response: {
+              resp_result: {
+                result: {
+                  products: {
+                    product: [
+                      {
+                        product_id: "3256808644322015",
+                        product_title: "Fitness Resistance Bands Set",
+                        target_sale_price: "8.99",
+                        lastest_volume: 5764,
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const provider = new AliExpressOfficialApiProvider({
+      appKey: "app-key",
+      appSecret: "app-secret",
+      trackingId: "tracking-id",
+    });
+    const products = await provider.searchHotProducts({ keyword: "fitness", limit: 10 });
+    expect(products).toHaveLength(1);
+    expect(products[0].meta.warnings).toContain("retrieved_by_hotproduct");
+    expect(products[0].orderCount).toBe(5764);
+  });
+});

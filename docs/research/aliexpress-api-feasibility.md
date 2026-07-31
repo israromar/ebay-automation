@@ -39,7 +39,18 @@ No trusted AliExpress MCP exists. Prefer **AliExpress Open Platform Affiliate AP
 - Runtime switch: `ALIEXPRESS_IMAGE_SEARCH_ENABLED=true`; leave disabled until the app key receives image-search permission.
 - Optional Affiliate value: `ALIEXPRESS_APP_SIGNATURE`.
 
-**Live probe (2026-07-30):** The eBay neck-traction stock image was fetched and compressed to 14,744 bytes. The signed multipart request reached the SG gateway, but AliExpress returned `InsufficientPermission: App does not have permission to access this api`. Request Affiliate Image Search permission for the current app key before enabling the runtime switch.
+**Live probe (2026-07-31):** Still `InsufficientPermission` after Advanced API approval. Image search is a **separate** permission from Advanced (smart match / hot products). Keep the runtime switch off until AliExpress grants figure-search access.
+
+### Advanced Affiliates API (Active)
+
+Approved Advanced access unlocks:
+
+| Method | Purpose | Runtime switch | Status |
+| --- | --- | --- | --- |
+| `aliexpress.affiliate.product.smartmatch` | Keyword / `product_id` recommendations | `ALIEXPRESS_SMARTMATCH_ENABLED` (default on) | Live OK |
+| `aliexpress.affiliate.hotproduct.query` | Hot / high-commission catalog | `ALIEXPRESS_HOTPRODUCT_ENABLED` (default on) | Live OK |
+
+**Live probe (2026-07-31):** smartmatch and hotproduct succeed with the current app key. Retrieval unions these hits with `product.query` (and image search when authorized). Keyword-only smartmatch can be noisy — hard match gates still apply.
 
 ## Rate limits
 

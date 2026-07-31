@@ -1,0 +1,52 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { detectAutomationCapabilities } from "@/lib/domain/automation";
+import { AutonomousResearchOrchestrator } from "@/lib/services/autonomous-research";
+
+const startSchema = z.object({
+  topKeywords: z.number().int().min(1).max(20).optional(),
+  productsPerKeyword: z.number().int().min(1).max(20).optional(),
+  topIdeas: z.number().int().min(1).max(40).optional(),
+  searchLimit: z.number().int().min(5).max(50).optional(),
+  maxRuntimeMs: z
+    .number()
+    .int()
+    .min(60_000)
+    .max(60 * 60_000)
+    .optional(),
+  destination: z.enum(["csv", "google_sheets"]).optional(),
+  market: z.string().min(2).max(8).optional(),
+  keywords: z.array(z.string().min(1)).max(20).optional(),
+});
+
+export async function GET() {
+  try {
+    const orchestrator = new AutonomousResearchOrchestrator();
+    const runs = await orchestrator.listRuns(30);
+    return NextResponse.json({
+      runs,
+      capabilities: detectAutomationCapabilities(),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load automation runs";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  const json = await req.json().catch(() => ({}));
+  const parsed = startSchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  try {
+    const orchestrator = new AutonomousResearchOrchestrator();
+    const run = await orchestrator.start(parsed.data);
+    // Kick the first stage immediately so the UI shows progress without a worker.
+    const advanced = await orchestrator.advance(run.id);
+    return NextResponse.json({ run: advanced });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to start automation run";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

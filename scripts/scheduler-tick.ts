@@ -4,14 +4,16 @@
  */
 import { syncSchedules, JobQueue } from "../src/lib/jobs/queue";
 import { logInfo } from "../src/lib/logger";
+import { processAutomationJobs } from "../src/lib/services/autonomous-research";
 
 async function main() {
   const due = await syncSchedules();
   logInfo("scheduler_tick", { due: due?.id ?? null });
   const queue = new JobQueue({ concurrency: 2, domainDelayMs: 500 });
   await queue.processDue({
-    // Wire FULL_RESEARCH etc. when using enqueued jobs from API
+    // Legacy scan jobs can be added here as they are enqueued.
   });
+  await processAutomationJobs(queue);
 }
 
 main().catch((e) => {
