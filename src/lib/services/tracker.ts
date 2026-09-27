@@ -55,7 +55,10 @@ export async function runTracker(options?: { deadline?: number }): Promise<Track
     for (const listing of batch) {
       const detail = details.get(listing.browseItemId!);
       if (!detail) {
-        await prisma.trackedListing.update({ where: { id: listing.id }, data: { active: false, endedReason: "not_found", lastSnapshotAt: now } });
+        await prisma.trackedListing.update({
+          where: { id: listing.id },
+          data: { active: false, endedReason: "not_found", lastSnapshotAt: now },
+        });
         result.deactivated += 1;
         continue;
       }

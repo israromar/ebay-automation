@@ -45,7 +45,10 @@ export async function POST(req: Request) {
     where: { workspaceId: session.workspace.id, startedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
   });
   if (recent >= max) {
-    return NextResponse.json({ error: `Daily limit reached (${max} hunts / 24h). Raise MAX_HUNTS_PER_DAY to allow more.` }, { status: 429 });
+    return NextResponse.json(
+      { error: `Daily limit reached (${max} hunts / 24h). Raise MAX_HUNTS_PER_DAY to allow more.` },
+      { status: 429 },
+    );
   }
 
   const typed = [...new Set(parsed.data.keywords.map((k) => k.trim().toLowerCase()).filter((k) => k.length >= 2))];

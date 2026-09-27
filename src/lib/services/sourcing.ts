@@ -59,7 +59,15 @@ export interface SourcingOutcome {
 /** Find, gate and persist the top 3 AliExpress sources for one tracked listing. */
 export async function sourceListing(
   ae: AliExpressProvider,
-  listing: { id: string; title: string; keyword: string; imageUrl: string | null; priceMinor: number; shippingMinor: number | null; avgSoldPriceMinor: number | null },
+  listing: {
+    id: string;
+    title: string;
+    keyword: string;
+    imageUrl: string | null;
+    priceMinor: number;
+    shippingMinor: number | null;
+    avgSoldPriceMinor: number | null;
+  },
   rules: SourcingRules,
 ): Promise<SourcingOutcome> {
   // Terapeak rows without a live listing carry only an average sold price.

@@ -39,11 +39,7 @@ const HEADER_ALIASES: Record<TerapeakField, RegExp[]> = {
 };
 
 function normalizeHeader(h: string): string {
-  return h
-    .toLowerCase()
-    .replace(/[ _]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return h.toLowerCase().replace(/[ _]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 export function detectDelimiter(headerLine: string): "\t" | "," | ";" {
@@ -135,7 +131,9 @@ export function parseTerapeakText(text: string, options?: { rangeDays?: number }
   const table = parseDelimited(trimmed, detectDelimiter(firstLine));
   const header = table[0] ?? [];
   const cols = mapColumns(header);
-  const columns = Object.fromEntries(Object.entries(cols).map(([k, i]) => [k, header[i as number]?.trim() ?? ""])) as TerapeakParseResult["columns"];
+  const columns = Object.fromEntries(
+    Object.entries(cols).map(([k, i]) => [k, header[i as number]?.trim() ?? ""]),
+  ) as TerapeakParseResult["columns"];
 
   const errors: TerapeakRowError[] = [];
   if (cols.totalSold == null) {

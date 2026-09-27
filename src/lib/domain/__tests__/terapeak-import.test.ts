@@ -11,7 +11,13 @@ describe("parseTerapeakText", () => {
     const r = parseTerapeakText(text);
     expect(r.errors).toEqual([]);
     expect(r.rows).toHaveLength(2);
-    expect(r.rows[0]).toMatchObject({ title: "Resistance Bands Set 11 Piece", totalSold: 1245, sold30d: 1245, avgSoldPriceMinor: 2499, itemId: null });
+    expect(r.rows[0]).toMatchObject({
+      title: "Resistance Bands Set 11 Piece",
+      totalSold: 1245,
+      sold30d: 1245,
+      avgSoldPriceMinor: 2499,
+      itemId: null,
+    });
     expect(r.columns.totalSold).toBe("Total sold");
   });
 

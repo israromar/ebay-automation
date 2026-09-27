@@ -80,7 +80,14 @@ describe("AliExpressOfficialApiProvider", () => {
               result: {
                 products: {
                   product: [
-                    { product_id: "1", product_title: "A", sale_price: "5", evaluate_rate: "94.0%", evaluation_count: "120", lastest_volume: "900" },
+                    {
+                      product_id: "1",
+                      product_title: "A",
+                      sale_price: "5",
+                      evaluate_rate: "94.0%",
+                      evaluation_count: "120",
+                      lastest_volume: "900",
+                    },
                     { product_id: "2", product_title: "B", sale_price: "5", evaluate_rate: "4.9" },
                     { product_id: "3", product_title: "C", sale_price: "5" },
                   ],

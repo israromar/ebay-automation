@@ -50,11 +50,7 @@ export function currentSnapshotSegment(snapshots: SnapshotPoint[]): SnapshotPoin
   return sorted.slice(start);
 }
 
-export function computeDemand(input: {
-  snapshots: SnapshotPoint[];
-  itemCreationDate?: Date | null;
-  now?: Date;
-}): DemandResult {
+export function computeDemand(input: { snapshots: SnapshotPoint[]; itemCreationDate?: Date | null; now?: Date }): DemandResult {
   const now = input.now ?? new Date();
   const segment = currentSnapshotSegment(input.snapshots);
   const latest = segment[segment.length - 1];

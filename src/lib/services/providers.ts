@@ -19,6 +19,7 @@ export function createAliExpressProvider(): AliExpressProvider {
     appSecret,
     trackingId: process.env.ALIEXPRESS_TRACKING_ID ?? "default",
     appSignature: process.env.ALIEXPRESS_APP_SIGNATURE,
+    gatewayUrl: process.env.ALIEXPRESS_GATEWAY_URL || undefined,
   });
 }
 
@@ -26,6 +27,9 @@ export function createEbayProvider(): EbayBrowseApiProvider {
   const provider = new EbayBrowseApiProvider({
     clientId: process.env.EBAY_CLIENT_ID ?? "",
     clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",
+    marketplaceId: process.env.EBAY_MARKETPLACE_ID || undefined,
+    // e.g. https://api.sandbox.ebay.com for sandbox keys
+    baseUrl: process.env.EBAY_API_BASE_URL || undefined,
   });
   if (!provider.configured) {
     throw new ConfigError("eBay API keys missing: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET.");

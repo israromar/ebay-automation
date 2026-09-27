@@ -49,7 +49,8 @@ export function buildListingWhere(workspaceId: string, query: ListingQuery, sett
 
   const and: Prisma.TrackedListingWhereInput[] = [{ workspaceId }];
   if (query.huntId) and.push({ huntId: query.huntId });
-  if (query.q) and.push({ OR: [{ title: { contains: query.q, mode: "insensitive" } }, { keyword: { contains: query.q, mode: "insensitive" } }] });
+  if (query.q)
+    and.push({ OR: [{ title: { contains: query.q, mode: "insensitive" } }, { keyword: { contains: query.q, mode: "insensitive" } }] });
   if (query.view === "winners") and.push(winner);
   if (query.view === "watching") and.push({ active: true }, { NOT: winner });
   return { AND: and };

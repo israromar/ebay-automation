@@ -315,3 +315,15 @@ ALTER TABLE "SoldSnapshot" ADD CONSTRAINT "SoldSnapshot_listingId_fkey" FOREIGN 
 -- AddForeignKey
 ALTER TABLE "SourceMatch" ADD CONSTRAINT "SourceMatch_listingId_fkey" FOREIGN KEY ("listingId") REFERENCES "TrackedListing"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+
+-- Lock down Supabase Data API: enable RLS with no anon/authenticated policies (Prisma connects as owner).
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['HuntSettings', 'Hunt', 'TrackedListing', 'SoldSnapshot', 'SourceMatch', 'CronState'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE format('REVOKE ALL ON TABLE %I FROM anon, authenticated', t);
+    END IF;
+  END LOOP;
+END $$;

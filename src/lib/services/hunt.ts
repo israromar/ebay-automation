@@ -37,7 +37,10 @@ function appendLog(logJson: string, message: string): string {
   return JSON.stringify(log.slice(-60));
 }
 
-export async function createHunt(workspaceId: string, input: { kind: "KEYWORDS"; keywords: string[] } | { kind: "TERAPEAK"; rows: TerapeakRow[]; label: string }) {
+export async function createHunt(
+  workspaceId: string,
+  input: { kind: "KEYWORDS"; keywords: string[] } | { kind: "TERAPEAK"; rows: TerapeakRow[]; label: string },
+) {
   const payload = input.kind === "KEYWORDS" ? input.keywords : input.rows;
   if (payload.length === 0) throw new Error(input.kind === "KEYWORDS" ? "Add at least one keyword" : "No valid rows to import");
   const label = input.kind === "KEYWORDS" ? input.keywords.slice(0, 4).join(", ") + (input.keywords.length > 4 ? "…" : "") : input.label;
@@ -48,7 +51,9 @@ export async function createHunt(workspaceId: string, input: { kind: "KEYWORDS";
       label,
       payloadJson: JSON.stringify(payload),
       totalItems: payload.length,
-      logJson: JSON.stringify([{ at: new Date().toISOString(), message: `Started (${payload.length} ${input.kind === "KEYWORDS" ? "keywords" : "rows"})` }]),
+      logJson: JSON.stringify([
+        { at: new Date().toISOString(), message: `Started (${payload.length} ${input.kind === "KEYWORDS" ? "keywords" : "rows"})` },
+      ]),
     },
   });
 }
@@ -80,7 +85,10 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
         data: {
           error: null,
           sourcedCount: { increment: sourced.withSources },
-          logJson: appendLog(hunt.logJson, `Sourced ${sourced.done} listing(s) on AliExpress · ${sourced.withSources} with a qualifying 4.7★+ source`),
+          logJson: appendLog(
+            hunt.logJson,
+            `Sourced ${sourced.done} listing(s) on AliExpress · ${sourced.withSources} with a qualifying 4.7★+ source`,
+          ),
         },
       });
     }
@@ -94,7 +102,7 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
           where: { id: huntId },
           data: {
             error: null,
-          cursor: hunt.cursor + rows.length,
+            cursor: hunt.cursor + rows.length,
             scannedCount: { increment: rows.length },
             trackedCount: { increment: result.tracked },
             logJson: appendLog(hunt.logJson, `Imported ${rows.length} Terapeak row(s): ${result.linked} linked to live eBay listings`),
@@ -186,7 +194,13 @@ async function fetchDetails(ebay: EbayBrowseApiProvider, ids: string[], deadline
   return merged;
 }
 
-async function discoverKeyword(ebay: EbayBrowseApiProvider, hunt: HuntRow, keyword: string, settings: HuntSettingsValues, deadline: number) {
+async function discoverKeyword(
+  ebay: EbayBrowseApiProvider,
+  hunt: HuntRow,
+  keyword: string,
+  settings: HuntSettingsValues,
+  deadline: number,
+) {
   const now = new Date();
   const results = await ebay.searchProducts({
     keyword,
@@ -275,8 +289,7 @@ async function importTerapeakRows(ebay: EbayBrowseApiProvider, hunt: HuntRow, ro
   const searches = await mapWithConcurrency(
     titleOnly,
     4,
-    (row) =>
-      ebay.searchProducts({ keyword: row.title.slice(0, 90), limit: 20 }),
+    (row) => ebay.searchProducts({ keyword: row.title.slice(0, 90), limit: 20 }),
     deadline,
   );
   titleOnly.forEach((row, i) => {
@@ -301,16 +314,18 @@ async function importTerapeakRows(ebay: EbayBrowseApiProvider, hunt: HuntRow, ro
       sold30d: row.sold30d,
       avgSoldPriceMinor: row.avgSoldPriceMinor,
       huntId: hunt.id,
-      keyword: row.title.split(/\s+/).slice(0, 4).join(" "),
       sourcedAt: null,
       sourceError: null,
     };
-    const existing = await prisma.trackedListing.findUnique({ where: { workspaceId_ebayItemId: { workspaceId: hunt.workspaceId, ebayItemId } } });
+    const existing = await prisma.trackedListing.findUnique({
+      where: { workspaceId_ebayItemId: { workspaceId: hunt.workspaceId, ebayItemId } },
+    });
     const listing = existing
       ? await prisma.trackedListing.update({ where: { id: existing.id }, data: { ...base, active: Boolean(detail) } })
       : await prisma.trackedListing.create({
           data: {
             ...base,
+            keyword: row.title.split(/\s+/).slice(0, 4).join(" "),
             workspaceId: hunt.workspaceId,
             ebayItemId,
             browseItemId: detail?.itemId ?? null,
