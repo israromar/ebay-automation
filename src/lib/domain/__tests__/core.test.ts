@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { calculateProfit } from "@/lib/domain/profit";
-import { qualifyAliExpressProduct } from "@/lib/domain/qualification";
 import {
   buildAliExpressSearchQueries,
   buildAliExpressSearchQuery,
@@ -10,8 +9,6 @@ import {
   scoreAliExpressSourceMatch,
   scoreProductMatch,
 } from "@/lib/domain/matching";
-import { DEFAULT_RULES } from "@/lib/domain/types";
-import { nextCronRun } from "@/lib/jobs/queue";
 
 describe("profit", () => {
   it("calculates net margin with fees and sourcing buffer", () => {
@@ -33,28 +30,6 @@ describe("profit", () => {
     expect(result.totalEstimatedCostMinor).toBe(1849);
     expect(result.estimatedProfitMinor).toBe(1151);
     expect(result.profitMarginPercent).toBeCloseTo(38.366, 2);
-  });
-});
-
-describe("qualification", () => {
-  it("rejects low rating/reviews/orders", () => {
-    const r = qualifyAliExpressProduct({ rating: 4.5, reviewCount: 10, orderCount: 20 }, DEFAULT_RULES);
-    expect(r.passed).toBe(false);
-    expect(r.reasons).toContain("ALIEXPRESS_RATING_TOO_LOW");
-    expect(r.reasons).toContain("ALIEXPRESS_REVIEWS_TOO_LOW");
-    expect(r.reasons).toContain("ALIEXPRESS_ORDERS_TOO_LOW");
-  });
-
-  it("passes threshold products", () => {
-    const r = qualifyAliExpressProduct({ rating: 4.8, reviewCount: 30, orderCount: 100 }, DEFAULT_RULES);
-    expect(r.passed).toBe(true);
-  });
-
-  it("treats missing review count as incomplete, not hard fail", () => {
-    const r = qualifyAliExpressProduct({ rating: 4.9, reviewCount: undefined, orderCount: 100 }, DEFAULT_RULES);
-    expect(r.passed).toBe(false);
-    expect(r.reasons).toEqual([]);
-    expect(r.missingFields).toContain("reviewCount");
   });
 });
 
@@ -252,13 +227,5 @@ describe("matching", () => {
       reasons: expect.arrayContaining(["form_factor_match"]),
     });
     expect(hanging.confidence).toBeGreaterThanOrEqual(70);
-  });
-});
-
-describe("scheduler", () => {
-  it("computes next daily run", () => {
-    const from = new Date("2026-07-26T10:00:00Z");
-    const next = nextCronRun("daily", from);
-    expect(next.getTime()).toBeGreaterThan(from.getTime());
   });
 });

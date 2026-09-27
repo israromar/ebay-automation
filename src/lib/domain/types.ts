@@ -1,54 +1,3 @@
-/** Candidate lifecycle statuses */
-export const CANDIDATE_STATUSES = [
-  "DISCOVERED",
-  "COLLECTING",
-  "ALIEXPRESS_REJECTED",
-  "EBAY_MATCH_REQUIRED",
-  "EBAY_MATCHED",
-  "DEMAND_NOT_VERIFIED",
-  "NEEDS_MANUAL_VALIDATION",
-  "UNPROFITABLE",
-  "APPROVED",
-  "EXPORT_PENDING",
-  "EXPORTED",
-  "DATA_SOURCE_FAILED",
-] as const;
-
-export type CandidateStatus = (typeof CANDIDATE_STATUSES)[number];
-
-export const REJECTION_CODES = [
-  "ALIEXPRESS_RATING_TOO_LOW",
-  "ALIEXPRESS_REVIEWS_TOO_LOW",
-  "ALIEXPRESS_ORDERS_TOO_LOW",
-  "EBAY_RECENT_SALES_TOO_LOW",
-  "EBAY_SOLD_HISTORY_UNAVAILABLE",
-  "MATCH_CONFIDENCE_TOO_LOW",
-  "NO_QUALIFIED_ALIEXPRESS_SOURCE",
-  "SOURCE_PRICE_NOT_BELOW_EBAY",
-  "VISUAL_MATCH_TOO_LOW",
-  "VISUAL_MATCH_UNAVAILABLE",
-  "MARGIN_TOO_LOW",
-  "MISSING_SHIPPING_COST",
-  "STALE_DATA",
-  "MANUAL_INTERVENTION_REQUIRED",
-  "HIGH_QUALITY_EBAY_PRICE_TOO_LOW",
-  "HIGH_QUALITY_SOURCE_COST_RATIO_HIGH",
-  "HIGH_QUALITY_MARGIN_TOO_LOW",
-  "HIGH_QUALITY_AE_VOLUME_TOO_LOW",
-  "BELOW_HIGH_QUALITY_BAR",
-  "SELL_THROUGH_TOO_LOW",
-  "SUPPLIER_COST_ABOVE_MAX",
-  "ECONOMICS_IMPOSSIBLE",
-  "RESTRICTED_PRODUCT",
-] as const;
-
-export type RejectionCode = (typeof REJECTION_CODES)[number];
-
-export interface MoneyMinor {
-  amountMinor: number;
-  currency: string;
-}
-
 export interface ProviderMeta {
   source: string;
   confidence: number;
@@ -71,108 +20,17 @@ export interface AliExpressProduct {
   url: string;
   imageUrl?: string;
   priceMinor: number;
+  /** Undefined when the Affiliate API did not return shipping (the common case). */
   shippingMinor?: number;
   currency: string;
+  /** 0–5 stars. The Affiliate API returns `evaluate_rate` (% positive); mapped as % ÷ 20. */
   rating?: number;
   reviewCount?: number;
   orderCount?: number;
-  variants?: Array<{ skuId?: string; name: string; priceMinor: number; attrs?: Record<string, string> }>;
   meta: ProviderMeta;
 }
 
 export type AliExpressProductDetails = AliExpressProduct;
-
-export interface EbayListing {
-  itemId: string;
-  title: string;
-  url: string;
-  imageUrl?: string;
-  priceMinor: number;
-  shippingMinor?: number;
-  currency: string;
-  condition?: string;
-  sellerUsername?: string;
-  sellerLocation?: string;
-  categoryId?: string;
-  brand?: string;
-  model?: string;
-  /** Browse getItem estimated lifetime sold — not a verified 30-day count. */
-  estimatedSoldQuantity?: number;
-  meta: ProviderMeta;
-}
-
-export type EbayListingDetails = EbayListing;
-
-export interface EbayDemandInput {
-  keyword?: string;
-  itemId?: string;
-  categoryId?: string;
-}
-
-export interface EbayDemandResult {
-  available: boolean;
-  soldLast30Days?: number;
-  /** Units in the last 7 days when the source actually covers that window. */
-  sold7d?: number | null;
-  /** Units in the last 90 days when the source actually covers that window. */
-  sold90d?: number | null;
-  /** Units in the last 365 days when the source actually covers that window. */
-  sold365d?: number | null;
-  avgCompletedSaleMinor?: number;
-  medianCompletedSaleMinor?: number;
-  totalHistoricalSold?: number;
-  source: string;
-  meta: ProviderMeta;
-  reasonCode?: RejectionCode;
-}
-
-export interface QualificationRules {
-  minimumRating: number;
-  preferredRating: number;
-  idealRating: number;
-  minimumReviewCount: number;
-  preferredReviewCount: number;
-  minimumOrderCount: number;
-  preferredOrderCount: number;
-  minimumRecentSales: number;
-  /** soldLast30Days / activeListingCount. Applied only when both inputs exist. */
-  minSellThroughRate: number;
-  /** Absolute profit floor in minor units. Margin percent still applies when this is 0. */
-  minimumProfitMinor: number;
-  minimumMatchConfidence: number;
-  minimumNetMarginPercent: number;
-  preferredNetMarginPercent: number;
-  additionalSourcingCostMinor: number;
-  ebayFeeRate: number;
-  promotedListingRate: number;
-  expectedReturnCostMinor: number;
-  expectedRefundCostMinor: number;
-  otherFixedCostsMinor: number;
-  otherPercentageCost: number;
-}
-
-export const DEFAULT_RULES: QualificationRules = {
-  minimumRating: 4.7,
-  preferredRating: 4.8,
-  idealRating: 4.9,
-  minimumReviewCount: 20,
-  preferredReviewCount: 30,
-  minimumOrderCount: 50,
-  preferredOrderCount: 100,
-  minimumRecentSales: 30,
-  minSellThroughRate: 0.2,
-  minimumProfitMinor: 0,
-  minimumMatchConfidence: 70,
-  minimumNetMarginPercent: 10,
-  preferredNetMarginPercent: 15,
-  additionalSourcingCostMinor: 199,
-  ebayFeeRate: 0.1325,
-  promotedListingRate: 0,
-  expectedReturnCostMinor: 0,
-  expectedRefundCostMinor: 0,
-  otherFixedCostsMinor: 0,
-  otherPercentageCost: 0,
-};
 
 export interface ProfitInput {
   aliexpressItemPriceMinor: number;
