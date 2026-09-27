@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  medianMinor,
-  parseEbayPurchaseDate,
-  parseEbayPurchaseHistoryHtml,
-} from "@/lib/domain/ebay-purchase-history";
+import { medianMinor, parseEbayPurchaseDate, parseEbayPurchaseHistoryHtml } from "@/lib/domain/ebay-purchase-history";
 
 const SAMPLE_HTML = `
 <html><body>
@@ -79,10 +75,9 @@ describe("ebay purchase history parse", () => {
   });
 
   it("flags login walls when no purchase table is present", () => {
-    const result = parseEbayPurchaseHistoryHtml(
-      `<html><body><a href="https://signin.ebay.com">Sign in</a></body></html>`,
-      { itemIdOrUrl: "178349261747" },
-    );
+    const result = parseEbayPurchaseHistoryHtml(`<html><body><a href="https://signin.ebay.com">Sign in</a></body></html>`, {
+      itemIdOrUrl: "178349261747",
+    });
     expect(result.warnings).toContain("login_wall_detected");
     expect(result.purchases).toHaveLength(0);
   });
