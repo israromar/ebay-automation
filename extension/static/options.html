@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hunter Companion options</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      main {
+        max-width: 560px;
+        margin: 24px auto;
+        padding: 0 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Hunter Companion</h1>
+      <p class="muted">
+        Reads exact 30-day sold counts from eBay purchase history using your own signed-in eBay session, and skips AliExpress bundle-deal
+        pages.
+      </p>
+      <form id="form" class="card">
+        <label for="appUrl">Hunter app URL</label>
+        <input id="appUrl" type="url" required placeholder="https://your-app.vercel.app" />
+        <label for="token">Extension token</label>
+        <input id="token" type="password" autocomplete="off" placeholder="hx_… (Hunter → Settings → Connect Chrome extension)" />
+        <label for="dailyCap">Max purchase-history checks per day</label>
+        <input id="dailyCap" type="number" min="1" max="2000" />
+        <label class="check"
+          ><input id="autoVerify" type="checkbox" />
+          <span>Verify queued listings in the background while Chrome is open (about one every 5 seconds)</span></label
+        >
+        <label class="check"
+          ><input id="bundleSkip" type="checkbox" />
+          <span>Skip AliExpress Bundle Deals / SuperDeals pages and open the single item instead</span></label
+        >
+        <div class="row" style="margin-top: 14px">
+          <button type="submit">Save</button>
+          <button type="button" class="ghost" id="test">Test connection</button>
+          <span id="msg" class="muted"></span>
+        </div>
+      </form>
+      <div class="card muted">
+        <h2 style="color: var(--fg)">Before you start</h2>
+        Sign in to eBay in this Chrome profile. If eBay shows a sign-in page or a bot check, the extension pauses for 6 hours and shows a
+        red “!” badge. Sign in or solve it on ebay.com, then press Resume in the popup.
+      </div>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
