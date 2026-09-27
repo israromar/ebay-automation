@@ -42,7 +42,7 @@ If you track more listings than fit in one run, add a second cron entry (Pro pla
 
 ### Companion extension
 
-- `npm run build` runs `npm run ext:build` first, so every deploy serves an up-to-date `/hunter-companion.zip`. The app URL baked into it is `HUNTER_APP_URL` if set, otherwise Vercel's `VERCEL_PROJECT_PRODUCTION_URL`.
+- `npm run build` (and `npm run dev`) run `npm run ext:build` first, so every deploy serves an up-to-date zip from Settings → Hunter Companion (`/api/settings/extension/download`). If a custom build command skips it, the download shows an error saying so. The app URL baked into it is `HUNTER_APP_URL` if set, otherwise Vercel's `VERCEL_PROJECT_PRODUCTION_URL`.
 - Migration `20260927150000_companion_extension` adds `ExtensionToken` (RLS on) and purchase-history columns. Run `npx prisma migrate deploy`.
 - `/api/extension/*` skips the session middleware and is authenticated by the extension's bearer token.
 - Optional: `EXTENSION_DAILY_CAP` (default 300 checks per workspace per day).

@@ -82,6 +82,34 @@ export function ExtensionConnectCard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+
+  /** Fetch the zip through the API so a missing package shows a real message, not a browser "file wasn't available". */
+  async function download() {
+    setDownloading(true);
+    setDownloadError("");
+    try {
+      const res = await fetch("/api/settings/extension/download", { headers: { "x-pulse-silent": "1" } });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `Download failed (${res.status})`);
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "hunter-companion.zip";
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   async function create() {
     setBusy(true);
     setError("");
@@ -126,10 +154,16 @@ export function ExtensionConnectCard() {
       <CardContent className="space-y-4 text-sm">
         <ol className="list-decimal space-y-1.5 pl-5">
           <li>
-            <a href="/hunter-companion.zip" download className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-              <Download className="size-3.5" aria-hidden /> Download the extension
-            </a>{" "}
+            <button
+              type="button"
+              onClick={() => void download()}
+              disabled={downloading}
+              className="inline-flex items-center gap-1 font-medium text-primary hover:underline disabled:opacity-60"
+            >
+              <Download className="size-3.5" aria-hidden /> {downloading ? "Preparing download…" : "Download the extension"}
+            </button>{" "}
             and unzip it.
+            {downloadError ? <span className="mt-1 block text-destructive">{downloadError}</span> : null}
           </li>
           <li>
             Open <code className="rounded bg-muted px-1">chrome://extensions</code>, turn on <strong>Developer mode</strong>, click{" "}

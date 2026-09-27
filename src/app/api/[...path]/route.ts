@@ -50,6 +50,9 @@ async function resolveHandler(path: string[], method: Method): Promise<Handler |
   }
 
   if (p === "terapeak/import" && method === "POST") return (await import("@/lib/api-handlers/terapeak-import")).POST;
+  if (p === "settings/extension/download" && method === "GET") {
+    return (await import("@/lib/api-handlers/extension-settings")).DOWNLOAD;
+  }
   if (p === "settings/extension") {
     const m = await import("@/lib/api-handlers/extension-settings");
     if (method === "GET") return m.GET as Handler;

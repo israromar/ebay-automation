@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run ext:build",
     "dev": "next dev",
     "prebuild": "npm run ext:build",
     "build": "next build",

@@ -73,7 +73,7 @@ The extension uses the same mechanisms as two public extensions, rebuilt for thi
 
 **Risk:** reading eBay pages automatically, even with your own account and at human pace, is against eBay's user agreement. Keep the daily cap modest.
 
-**Build:** `npm run ext:build` writes `extension/dist` and `public/hunter-companion.zip`. It also runs automatically before `npm run build`. The app URL baked in as the default comes from `HUNTER_APP_URL`, then Vercel's production URL, then `http://localhost:3000`; the Options page can change it.
+**Build:** `npm run ext:build` writes `extension/dist` and `public/hunter-companion.zip`. It runs automatically before both `npm run dev` and `npm run build`. The Settings download goes through `/api/settings/extension/download`, which rebuilds the zip on demand in development and returns a clear error in production if the deploy didn't build it. The app URL baked in as the default comes from `HUNTER_APP_URL`, then Vercel's production URL, then `http://localhost:3000`; the Options page can change it.
 
 ## Stack
 
