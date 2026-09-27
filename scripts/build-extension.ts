@@ -56,7 +56,17 @@ function manifest() {
     optional_host_permissions: ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
     declarative_net_request: { rule_resources: [{ id: "bundle_skip", enabled: true, path: "rules.json" }] },
     content_scripts: [
-      { matches: [...new Set(["https://www.ebay.com/itm/*", `${EBAY_ORIGIN}/itm/*`])], js: ["content-ebay.js"], run_at: "document_idle" },
+      {
+        matches: [
+          ...new Set([
+            "https://www.ebay.com/itm/*",
+            `${EBAY_ORIGIN}/itm/*`,
+            ...["co.uk", "de", "fr", "it", "es", "com.au", "ca"].map((tld) => `https://www.ebay.${tld}/itm/*`),
+          ]),
+        ],
+        js: ["content-ebay.js"],
+        run_at: "document_idle",
+      },
       { matches: ["https://*.aliexpress.com/*", "https://*.aliexpress.us/*"], js: ["content-aliexpress.js"], run_at: "document_start" },
     ],
   };

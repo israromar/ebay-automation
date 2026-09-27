@@ -14,21 +14,27 @@ const MAX_QUERIES = 2;
 export async function retrieveAliExpressCandidates(
   ae: AliExpressProvider,
   input: { title: string; keyword: string; imageUrl?: string | null },
+  options?: { currency?: string; shipToCountry?: string; maxQueries?: number; extraQueries?: string[] },
 ): Promise<{ products: AliExpressProduct[]; queries: string[]; errors: string[] }> {
-  const queries = buildAliExpressSearchQueries(input.title, input.keyword).slice(0, MAX_QUERIES);
+  const currency = options?.currency ?? "USD";
+  const shipToCountry = options?.shipToCountry ?? "US";
+  const queries = [...new Set([...buildAliExpressSearchQueries(input.title, input.keyword), ...(options?.extraQueries ?? [])])].slice(
+    0,
+    options?.maxQueries ?? MAX_QUERIES,
+  );
   const calls: Array<Promise<AliExpressProduct[]>> = [];
 
   for (const query of queries) {
-    calls.push(ae.searchProducts({ keyword: query, limit: 50, shipToCountry: "US", currency: "USD" }));
+    calls.push(ae.searchProducts({ keyword: query, limit: 50, shipToCountry, currency }));
     if (process.env.ALIEXPRESS_HOTPRODUCT_ENABLED !== "false" && ae.searchHotProducts) {
-      calls.push(ae.searchHotProducts({ keyword: query, limit: 25, shipToCountry: "US", currency: "USD" }));
+      calls.push(ae.searchHotProducts({ keyword: query, limit: 25, shipToCountry, currency }));
     }
   }
   if (process.env.ALIEXPRESS_SMARTMATCH_ENABLED !== "false" && ae.searchSmartMatch && queries[0]) {
-    calls.push(ae.searchSmartMatch({ keywords: queries[0], limit: 20, shipToCountry: "US", currency: "USD" }));
+    calls.push(ae.searchSmartMatch({ keywords: queries[0], limit: 20, shipToCountry, currency }));
   }
   if (process.env.ALIEXPRESS_IMAGE_SEARCH_ENABLED === "true" && input.imageUrl && ae.searchProductsByImage) {
-    calls.push(ae.searchProductsByImage({ imageUrl: input.imageUrl, limit: 50, shipToCountry: "US", currency: "USD" }));
+    calls.push(ae.searchProductsByImage({ imageUrl: input.imageUrl, limit: 50, shipToCountry, currency }));
   }
 
   const settled = await Promise.allSettled(calls);

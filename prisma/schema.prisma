@@ -27,6 +27,7 @@ model Workspace {
   hunts           Hunt[]
   listings        TrackedListing[]
   extensionTokens ExtensionToken[]
+  sourceLookups   SourceLookup[]
   createdAt       DateTime         @default(now())
 }
 
@@ -180,4 +181,30 @@ model ExtensionToken {
   revokedAt   DateTime?
 
   @@index([workspaceId])
+}
+
+/// Source finder: one pasted eBay listing and its ranked AliExpress candidates.
+model SourceLookup {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ebayUrl        String
+  ebayItemId     String?
+  marketplaceId  String?
+  currency       String    @default("GBP")
+  title          String?
+  imageUrl       String?
+  priceMinor     Int?
+  /// ok | no_candidates | failed
+  status         String
+  bestConfidence Int?
+  /// HIGH | MEDIUM | LOW
+  bestTier       String?
+  /// eBay listing snapshot + top candidates with all scores (JSON)
+  resultJson     String    @default("{}")
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([workspaceId, createdAt])
 }

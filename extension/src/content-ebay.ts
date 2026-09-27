@@ -1,4 +1,4 @@
-import { ebayItemIdFromUrl, money } from "./config";
+import { EBAY_ORIGIN, ebayItemIdFromUrl, getSettings, money } from "./config";
 import { send } from "./send";
 
 /**
@@ -55,9 +55,34 @@ function mountPoint(): HTMLElement {
   return panel;
 }
 
+/** Opens the app's Source finder for this listing (works on every eBay site). */
+function findSourceButton() {
+  const btn = el("button", { class: "ghost" }, "Find AliExpress source");
+  btn.addEventListener("click", async () => {
+    const { appUrl } = await getSettings();
+    window.open(`${appUrl}/source-finder?url=${encodeURIComponent(location.href)}`, "_blank", "noopener");
+  });
+  return btn;
+}
+
+/** Demand tracking (purchase history, hunts) is built for eBay US; other sites get the Source finder only. */
+function isHunterSite() {
+  return location.hostname === "www.ebay.com" || location.origin === EBAY_ORIGIN;
+}
+
 async function render(state?: { busy?: string; error?: string }) {
   const itemUrl = location.href;
   const panel = mountPoint();
+  if (!isHunterSite()) {
+    const row = el("div", { class: "row" });
+    row.append(
+      el("span", { class: "brand" }, "Hunter"),
+      el("span", { class: "muted" }, "Find this product on AliExpress, scored by title and photo"),
+      findSourceButton(),
+    );
+    panel.replaceChildren(row);
+    return;
+  }
   panel.replaceChildren(el("div", { class: "row" }, "Hunter: loading…"));
 
   let listing: PanelListing | null = null;
@@ -114,6 +139,7 @@ async function render(state?: { busy?: string; error?: string }) {
     });
     row.append(track);
   }
+  row.append(findSourceButton());
   panel.replaceChildren(row);
 
   if (listing?.bestSource) {

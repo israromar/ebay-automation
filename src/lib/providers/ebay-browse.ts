@@ -44,6 +44,20 @@ interface BrowseItem {
   itemCreationDate?: string;
   itemEndDate?: string;
   estimatedAvailabilities?: Array<{ estimatedSoldQuantity?: number; estimatedAvailabilityStatus?: string }>;
+  additionalImages?: Array<{ imageUrl?: string }>;
+  localizedAspects?: Array<{ name?: string; value?: string }>;
+  brand?: string;
+  mpn?: string;
+  color?: string;
+  size?: string;
+}
+
+/** Full listing view for the Source finder (any eBay site). */
+export interface EbayListingForSourcing extends EbayItemDetails {
+  marketplaceId: string;
+  images: string[];
+  aspects: Record<string, string>;
+  brand: string | null;
 }
 
 interface TokenCache {
@@ -223,6 +237,55 @@ export class EbayBrowseApiProvider {
       if (item) out.set(id, mapItemDetails(item));
     });
     return out;
+  }
+
+  /**
+   * One listing on any eBay site by its legacy id, with images and item specifics.
+   * Multi-variation listings (eBay error 11006) resolve through their item group, preferring the
+   * variation selected in the URL (`?var=`).
+   */
+  async getItemForSourcing(legacyId: string, marketplaceId: string, variationId?: string | null): Promise<EbayListingForSourcing | null> {
+    const byLegacy = new URL(`${this.baseUrl}/buy/browse/v1/item/get_item_by_legacy_id`);
+    byLegacy.searchParams.set("legacy_item_id", legacyId);
+    if (variationId) byLegacy.searchParams.set("legacy_variation_id", variationId);
+    const first = await this.requestRaw(byLegacy, marketplaceId);
+
+    let item: BrowseItem | null = first.ok ? (first.json as BrowseItem) : null;
+    const isGroup = !first.ok && JSON.stringify(first.json ?? "").includes("11006");
+    if (!item && isGroup) {
+      const byGroup = new URL(`${this.baseUrl}/buy/browse/v1/item/get_items_by_item_group`);
+      byGroup.searchParams.set("item_group_id", legacyId);
+      const group = await this.requestRaw(byGroup, marketplaceId);
+      const items = group.ok ? ((group.json as { items?: BrowseItem[] }).items ?? []) : [];
+      item = items.find((it) => variationId && it.itemId.includes(`|${variationId}`)) ?? items[0] ?? null;
+    }
+    if (!item) {
+      if (first.status === 404 || first.status === 400 || isGroup) return null;
+      throw new Error(`eBay Browse get_item_by_legacy_id failed: ${first.status} ${JSON.stringify(first.json).slice(0, 300)}`);
+    }
+
+    const aspects: Record<string, string> = {};
+    for (const a of item.localizedAspects ?? []) if (a.name && a.value) aspects[a.name] = a.value;
+    const images = [item.image?.imageUrl, ...(item.additionalImages ?? []).map((i) => i.imageUrl)].filter((u): u is string => Boolean(u));
+    return {
+      ...mapItemDetails(item),
+      marketplaceId,
+      images: [...new Set(images)],
+      aspects,
+      brand: item.brand ?? aspects.Brand ?? null,
+    };
+  }
+
+  private async requestRaw(url: URL, marketplaceId: string): Promise<{ ok: boolean; status: number; json: unknown }> {
+    const token = await this.getAppToken();
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-EBAY-C-MARKETPLACE-ID": marketplaceId },
+    });
+    const json: unknown = await res.json().catch(() => null);
+    if (res.status === 401 || res.status === 403) {
+      throw new EbayAccessError(`eBay Browse ${url.pathname} failed: ${res.status} ${JSON.stringify(json).slice(0, 300)}`, res.status);
+    }
+    return { ok: res.ok, status: res.status, json };
   }
 
   private async request(url: URL, options?: { allowMissing?: boolean }): Promise<unknown> {

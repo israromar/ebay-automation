@@ -52,6 +52,24 @@ Notes on the numbers:
 - The Affiliate API returns `evaluate_rate` as a percentage of positive feedback. It is converted as `% ÷ 20`, so 94% becomes 4.7★.
 - The Affiliate API does not return shipping. The **AE shipping estimate** from Settings is used instead and labelled "est." in the UI.
 
+## Source finder (eBay link → AliExpress source)
+
+Paste any eBay listing link (built for **ebay.co.uk**; .com, .de, .fr, .it, .es, .com.au and .ca also work) on `/source-finder`. You get the AliExpress products most likely to be the same item, each with a **confidence score**. The closest candidates are always shown, even when none is a confident match.
+
+**How a lookup works (about 5 to 25 seconds):**
+
+1. **Read the listing.** The eBay Browse API is called with the listing's own marketplace (`EBAY_GB`, GBP), so prices stay in the local currency. Multi-variation links (`?var=`) are resolved through the item group. The lookup reads the title, price, up to 4 photos and the item specifics.
+2. **Search AliExpress.** Up to 3 title queries, plus the item specifics (`Type`/`Colour`), smartmatch and hot products are sent in the local currency and ship-to country. AliExpress image search is added when `ALIEXPRESS_IMAGE_SEARCH_ENABLED=true`.
+3. **Score titles.** Every candidate gets a text score from the existing matcher (pack size, brand, accessory and context checks).
+4. **Compare photos.** The top 30 get an **image fingerprint** comparison (`src/lib/domain/image-fingerprint.ts`: background trimmed, dHash with mirror, colour histogram, edge/shape histogram). It's free, with no AI model or API key. It's very strong when both listings reuse the same factory photo (common in dropshipping) and weaker for lifestyle shots from other angles, so the image score is shown separately from the title score.
+5. **Combine** (`src/lib/domain/source-confidence.ts`): 55% title + 45% image, with boosts for the same photo and the same pack size. Accessories and wrong pack sizes are capped at 25. A missing image means 90% of the title score. Tiers: **High ≥ 75**, **Medium 50–74**, **Low < 50**.
+
+**What each candidate shows:** rating, orders, landed cost, estimated profit and margin in the listing's currency, whether it passes your sourcing rules, and reason chips ("Same photo", "Different colour", "Accessory, not the product", and so on).
+
+**Saving and sharing:** every lookup is saved (History), can be re-run, and exports to CSV. The Chrome extension adds a **Find AliExpress source** button on eBay item pages across these sites.
+
+**Limits:** `MAX_SOURCE_LOOKUPS_PER_DAY` (default 60 per workspace). Image downloads only go to AliExpress and eBay image hosts.
+
 ## Hunter Companion Chrome extension
 
 The extension uses the same mechanisms as two public extensions, rebuilt for this app; none of their code is used.

@@ -47,6 +47,12 @@ If you track more listings than fit in one run, add a second cron entry (Pro pla
 - `/api/extension/*` skips the session middleware and is authenticated by the extension's bearer token.
 - Optional: `EXTENSION_DAILY_CAP` (default 300 checks per workspace per day).
 
+### Source finder
+
+- Migration `20260928090000_source_lookup` adds `SourceLookup` (RLS on). Run `npx prisma migrate deploy`.
+- A lookup runs inside one API request (45 s budget, usually 5 to 25 s). It uses `sharp` for image fingerprints, which already ships with the app.
+- Optional: `MAX_SOURCE_LOOKUPS_PER_DAY` (default 60).
+
 ### Function limits
 
 - All API routes share a single catch-all function (`src/app/api/[...path]/route.ts`) with `maxDuration = 60`. That keeps the deploy within the Hobby plan's function limit.

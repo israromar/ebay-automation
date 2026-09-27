@@ -49,6 +49,18 @@ async function resolveHandler(path: string[], method: Method): Promise<Handler |
     if (path.length === 3 && path[2] === "resource" && method === "POST") return (req) => m.RESOURCE(req, idCtx(id));
   }
 
+  if (p === "source-lookups") {
+    const m = await import("@/lib/api-handlers/source-lookups");
+    if (method === "GET") return m.GET as Handler;
+    if (method === "POST") return m.POST;
+  }
+  if (path[0] === "source-lookups" && path[1]) {
+    const id = path[1];
+    const m = await import("@/lib/api-handlers/source-lookups");
+    if (path.length === 2 && method === "GET") return (req) => m.GET_ONE(req, idCtx(id));
+    if (path.length === 3 && path[2] === "rerun" && method === "POST") return (req) => m.RERUN(req, idCtx(id));
+    if (path.length === 3 && path[2] === "export.csv" && method === "GET") return (req) => m.EXPORT(req, idCtx(id));
+  }
   if (p === "terapeak/import" && method === "POST") return (await import("@/lib/api-handlers/terapeak-import")).POST;
   if (p === "settings/extension/download" && method === "GET") {
     return (await import("@/lib/api-handlers/extension-settings")).DOWNLOAD;

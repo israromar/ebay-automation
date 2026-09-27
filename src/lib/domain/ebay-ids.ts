@@ -24,3 +24,41 @@ export function legacyItemId(browseOrLegacyId: string): string {
 export function toBrowseItemId(id: string): string {
   return id.startsWith("v1|") ? id : `v1|${id}|0`;
 }
+
+export interface EbayMarketplace {
+  marketplaceId: string;
+  currency: string;
+  /** ISO country used as AliExpress ship-to. */
+  country: string;
+}
+
+const MARKETPLACES: Array<[RegExp, EbayMarketplace]> = [
+  [/(^|\.)ebay\.co\.uk$/, { marketplaceId: "EBAY_GB", currency: "GBP", country: "GB" }],
+  [/(^|\.)ebay\.com\.au$/, { marketplaceId: "EBAY_AU", currency: "AUD", country: "AU" }],
+  [/(^|\.)ebay\.de$/, { marketplaceId: "EBAY_DE", currency: "EUR", country: "DE" }],
+  [/(^|\.)ebay\.fr$/, { marketplaceId: "EBAY_FR", currency: "EUR", country: "FR" }],
+  [/(^|\.)ebay\.it$/, { marketplaceId: "EBAY_IT", currency: "EUR", country: "IT" }],
+  [/(^|\.)ebay\.es$/, { marketplaceId: "EBAY_ES", currency: "EUR", country: "ES" }],
+  [/(^|\.)ebay\.ca$/, { marketplaceId: "EBAY_CA", currency: "CAD", country: "CA" }],
+  [/(^|\.)ebay\.com$/, { marketplaceId: "EBAY_US", currency: "USD", country: "US" }],
+];
+
+/** eBay site from a listing URL (ebay.co.uk → EBAY_GB / GBP / GB). Null for non-eBay hosts. */
+export function marketplaceFromUrl(raw: string): EbayMarketplace | null {
+  try {
+    const host = new URL(raw.trim()).hostname.toLowerCase();
+    return MARKETPLACES.find(([re]) => re.test(host))?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Selected variation of a multi-variation listing (`?var=123`), if any. */
+export function variationIdFromUrl(raw: string): string | null {
+  try {
+    const v = new URL(raw.trim()).searchParams.get("var");
+    return v && /^\d{6,20}$/.test(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
