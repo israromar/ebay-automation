@@ -1,0 +1,131 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildEbayPurchaseHistoryUrl,
+  detectPurchaseHistoryBlock,
+  medianMinor,
+  parseEbayPurchaseDate,
+  parseEbayPurchaseHistoryHtml,
+} from "@/lib/domain/ebay-purchase-history";
+
+const SAMPLE_HTML = `
+<html><body>
+  <h1>Item Purchase History</h1>
+  <h2>Recent purchases</h2>
+  <table>
+    <tr>
+      <th>User ID</th>
+      <th>Buy it now price</th>
+      <th>Quantity</th>
+      <th>Date of purchase</th>
+    </tr>
+    <tr>
+      <td>b***2</td>
+      <td>US $12.01</td>
+      <td>1</td>
+      <td>28 Jul 2026 at 10:26:24am PDT</td>
+    </tr>
+    <tr>
+      <td>c***9</td>
+      <td>US $11.50</td>
+      <td>2</td>
+      <td>20 Jul 2026 at 3:05:00pm PDT</td>
+    </tr>
+    <tr>
+      <td>d***1</td>
+      <td>US $10.00</td>
+      <td>1</td>
+      <td>01 Jun 2026 at 9:00:00am PDT</td>
+    </tr>
+  </table>
+</body></html>
+`;
+
+describe("ebay purchase history parse", () => {
+  it("parses purchase dates with timezone", () => {
+    const date = parseEbayPurchaseDate("28 Jul 2024 at 10:26:24am PDT");
+    expect(date).toBeInstanceOf(Date);
+    expect(date!.toISOString()).toBe("2024-07-28T17:26:24.000Z");
+  });
+
+  it("counts units in the last 30 days and computes avg/median", () => {
+    const now = new Date("2026-07-31T12:00:00.000Z");
+    const result = parseEbayPurchaseHistoryHtml(SAMPLE_HTML, {
+      itemIdOrUrl: "178349261747",
+      now,
+      windowDays: 30,
+    });
+
+    expect(result.itemId).toBe("178349261747");
+    expect(result.purchases).toHaveLength(3);
+    // 1 + 2 in window; June row excluded
+    expect(result.soldLast30Days).toBe(3);
+    expect(result.sold7d).toBe(1);
+    expect(result.sold90d).toBeNull();
+    expect(result.sold365d).toBeNull();
+    // prices: 1201, 1150, 1150 → avg 1167
+    expect(result.avgCompletedSaleMinor).toBe(1167);
+    expect(result.medianCompletedSaleMinor).toBe(1150);
+    expect(result.warnings).toEqual(["window_90d_not_covered", "window_365d_not_covered"]);
+  });
+
+  it("counts 90-day sales only when the oldest row covers that window", () => {
+    const html = SAMPLE_HTML.replace("01 Jun 2026", "01 Apr 2026");
+    const result = parseEbayPurchaseHistoryHtml(html, {
+      itemIdOrUrl: "178349261747",
+      now: new Date("2026-07-31T12:00:00.000Z"),
+    });
+    expect(result.sold90d).toBe(3);
+    expect(result.sold365d).toBeNull();
+    expect(result.warnings).toContain("window_365d_not_covered");
+    expect(result.warnings).not.toContain("window_90d_not_covered");
+  });
+
+  it("flags login walls when no purchase table is present", () => {
+    const result = parseEbayPurchaseHistoryHtml(`<html><body><a href="https://signin.ebay.com">Sign in</a></body></html>`, {
+      itemIdOrUrl: "178349261747",
+    });
+    expect(result.warnings).toContain("login_wall_detected");
+    expect(result.purchases).toHaveLength(0);
+  });
+
+  it("computes median for even counts", () => {
+    expect(medianMinor([100, 200, 300, 400])).toBe(250);
+  });
+});
+
+describe("purchase history extras", () => {
+  const now = new Date("2026-09-27T12:00:00.000Z");
+
+  it("parses month-first dates used by newer eBay layouts", () => {
+    expect(parseEbayPurchaseDate("Sep 26, 2026 10:26:24 AM PDT", now)?.toISOString()).toBe("2026-09-26T17:26:24.000Z");
+    expect(parseEbayPurchaseDate("Sep 26, 2026 at 3:05pm PST", now)?.toISOString()).toBe("2026-09-26T23:05:00.000Z");
+  });
+
+  it("builds the purchase history URL from ids and urls", () => {
+    expect(buildEbayPurchaseHistoryUrl("v1|256000000001|0")).toBe("https://www.ebay.com/bin/purchaseHistory?item=256000000001");
+    expect(buildEbayPurchaseHistoryUrl("https://www.ebay.com/itm/256000000001?x=1")).toBe(
+      "https://www.ebay.com/bin/purchaseHistory?item=256000000001",
+    );
+    expect(buildEbayPurchaseHistoryUrl("tp-abc")).toBeNull();
+  });
+
+  it("marks a full page that stays inside 30 days as a lower bound", () => {
+    const rows = Array.from(
+      { length: 100 },
+      (_, i) => `<tr><td>a***${i}</td><td>US $9.99</td><td>1</td><td>Sep ${10 + (i % 15)}, 2026 10:00:00 AM PDT</td></tr>`,
+    ).join("");
+    const r = parseEbayPurchaseHistoryHtml(`<table><tr><th>Date of purchase</th></tr>${rows}</table>`, {
+      itemIdOrUrl: "256000000001",
+      now,
+    });
+    expect(r.soldLast30Days).toBe(100);
+    expect(r.soldLast30DaysIsLowerBound).toBe(true);
+    expect(r.warnings).toContain("page_full_lower_bound");
+  });
+
+  it("detects sign-in redirects and bot checks", () => {
+    expect(detectPurchaseHistoryBlock("<html>ok</html>", "https://signin.ebay.com/ws/eBayISAPI.dll?SignIn")).toBe("login_required");
+    expect(detectPurchaseHistoryBlock("<title>Pardon Our Interruption...</title>")).toBe("blocked");
+    expect(detectPurchaseHistoryBlock(SAMPLE_HTML)).toBeNull();
+  });
+});

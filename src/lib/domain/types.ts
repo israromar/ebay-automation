@@ -17,7 +17,10 @@ export interface ProductSearchInput {
 export interface AliExpressProduct {
   productId: string;
   title: string;
+  /** Canonical single-item page (never a bundle-deal page). */
   url: string;
+  /** Affiliate tracking link from the API, when present. */
+  affiliateUrl?: string;
   imageUrl?: string;
   priceMinor: number;
   /** Undefined when the Affiliate API did not return shipping (the common case). */

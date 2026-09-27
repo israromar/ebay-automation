@@ -1,5 +1,6 @@
 import { createHash, createHmac } from "crypto";
 import sharp from "sharp";
+import { canonicalAliExpressItemUrl, unbundleAliExpressUrl } from "@/lib/domain/aliexpress-url";
 import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
 import type { AliExpressHotProductInput, AliExpressImageSearchInput, AliExpressProvider, AliExpressSmartMatchInput } from "./types";
 
@@ -65,15 +66,17 @@ function mapProduct(raw: Record<string, unknown>, source: string): AliExpressPro
         : Number(ratingRaw);
   const reviewCount = raw.evaluation_count ?? raw.evaluationCount ?? raw.review_count;
   const orderCount = raw.lastest_volume ?? raw.latest_volume ?? raw.volume ?? raw.order_count;
-  const url =
-    String(raw.promotion_link ?? raw.product_detail_url ?? raw.detail_url ?? "") ||
-    (productId ? `https://www.aliexpress.com/item/${productId}.html` : "");
+  // Always link the single-item page; bundle-deal URLs hide or inflate the single-item price.
+  const detailUrl = String(raw.product_detail_url ?? raw.detail_url ?? "");
+  const url = productId ? canonicalAliExpressItemUrl(productId) : unbundleAliExpressUrl(detailUrl);
+  const affiliateUrl = String(raw.promotion_link ?? "") || undefined;
   const smallImages = Array.isArray(raw.product_small_image_urls) ? raw.product_small_image_urls : [];
 
   return {
     productId,
     title,
     url,
+    affiliateUrl,
     imageUrl: String(raw.product_main_image_url ?? smallImages[0] ?? raw.image_url ?? "") || undefined,
     priceMinor: toMinorUnits(price),
     shippingMinor: undefined,

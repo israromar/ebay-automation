@@ -94,6 +94,7 @@ export async function saveSources(listingId: string, sources: GatedSource[]) {
         aeProductId: s.product.productId,
         title: s.product.title,
         url: s.product.url,
+        affiliateUrl: s.product.affiliateUrl ?? null,
         imageUrl: s.product.imageUrl ?? null,
         priceMinor: s.product.priceMinor,
         shippingMinor: s.shippingMinor,

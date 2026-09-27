@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
 /** Model delegates the app needs. A client generated from an older schema lacks them. */
-const REQUIRED_DELEGATES = ["huntSettings", "hunt", "trackedListing", "soldSnapshot", "sourceMatch"] as const;
+const REQUIRED_DELEGATES = ["huntSettings", "hunt", "trackedListing", "soldSnapshot", "sourceMatch", "extensionToken"] as const;
 
 export class PrismaSchemaOutdatedError extends Error {
   override name = "PrismaSchemaOutdatedError";

@@ -19,14 +19,15 @@ model User {
 }
 
 model Workspace {
-  id        String           @id @default(cuid())
-  name      String
-  userId    String
-  user      User             @relation(fields: [userId], references: [id])
-  settings  HuntSettings?
-  hunts     Hunt[]
-  listings  TrackedListing[]
-  createdAt DateTime         @default(now())
+  id              String           @id @default(cuid())
+  name            String
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  settings        HuntSettings?
+  hunts           Hunt[]
+  listings        TrackedListing[]
+  extensionTokens ExtensionToken[]
+  createdAt       DateTime         @default(now())
 }
 
 /// One row per workspace. All money in minor units (cents).
@@ -78,40 +79,44 @@ model Hunt {
 }
 
 model TrackedListing {
-  id                String         @id @default(cuid())
-  workspaceId       String
-  workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  huntId            String?
-  hunt              Hunt?          @relation(fields: [huntId], references: [id], onDelete: SetNull)
+  id                    String         @id @default(cuid())
+  workspaceId           String
+  workspace             Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  huntId                String?
+  hunt                  Hunt?          @relation(fields: [huntId], references: [id], onDelete: SetNull)
   /// Legacy numeric eBay item id, or "tp-…" for Terapeak rows with no live listing.
-  ebayItemId        String
+  ebayItemId            String
   /// Browse id (v1|legacy|variation) used for getItems; null when not trackable.
-  browseItemId      String?
-  title             String
-  url               String
-  imageUrl          String?
-  priceMinor        Int
-  shippingMinor     Int?
-  currency          String         @default("USD")
-  keyword           String
-  itemCreationDate  DateTime?
+  browseItemId          String?
+  title                 String
+  url                   String
+  imageUrl              String?
+  priceMinor            Int
+  shippingMinor         Int?
+  currency              String         @default("USD")
+  keyword               String
+  itemCreationDate      DateTime?
   /// Lifetime units sold at the latest snapshot (Browse estimatedSoldQuantity).
-  lifetimeSold      Int?
-  sold30d           Int?
+  lifetimeSold          Int?
+  sold30d               Int?
   /// ESTIMATED | PROJECTED | VERIFIED
-  demandTier        String         @default("ESTIMATED")
-  /// browse_tracker | terapeak
-  demandSource      String         @default("browse_tracker")
-  avgSoldPriceMinor Int?
-  lastSnapshotAt    DateTime?
-  sourcedAt         DateTime?
-  sourceError       String?
-  active            Boolean        @default(true)
-  endedReason       String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  snapshots         SoldSnapshot[]
-  sources           SourceMatch[]
+  demandTier            String         @default("ESTIMATED")
+  /// browse_tracker | terapeak | purchase_history
+  demandSource          String         @default("browse_tracker")
+  avgSoldPriceMinor     Int?
+  lastSnapshotAt        DateTime?
+  sourcedAt             DateTime?
+  sourceError           String?
+  /// Last check of eBay /bin/purchaseHistory via the companion extension.
+  purchaseHistoryAt     DateTime?
+  /// ok | login_required | blocked | no_rows
+  purchaseHistoryStatus String?
+  active                Boolean        @default(true)
+  endedReason           String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  snapshots             SoldSnapshot[]
+  sources               SourceMatch[]
 
   @@unique([workspaceId, ebayItemId])
   @@index([workspaceId, active])
@@ -136,6 +141,7 @@ model SourceMatch {
   aeProductId       String
   title             String
   url               String
+  affiliateUrl      String?
   imageUrl          String?
   priceMinor        Int
   shippingMinor     Int
@@ -160,4 +166,18 @@ model CronState {
   cursor    String?
   runAt     DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Companion Chrome extension credentials. Only a sha256 of the token is stored.
+model ExtensionToken {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  label       String
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  @@index([workspaceId])
 }
