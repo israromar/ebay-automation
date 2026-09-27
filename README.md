@@ -1,79 +1,101 @@
-# eBay / AliExpress Product Research Analyzer
+# Winning Product Hunter (eBay → AliExpress)
 
-Automation platform that compares AliExpress sourcing with eBay demand and profitability.
+One feature, done properly: find **eBay listings selling ≥ 20 units in the last 30 days** and pair each one with an **AliExpress source rated ≥ 4.7★** that still leaves a profit.
 
-## Status
+Both thresholds (and every other gate) are editable in **Settings**.
 
-- **Phase 0 research:** see [`docs/research/`](docs/research/)
-- **Sold history:** not available via public Browse API — MVP uses `NEEDS_MANUAL_VALIDATION` (see [`docs/research/sold-history-decision.md`](docs/research/sold-history-decision.md))
-- **Production runtime does not require Cursor or MCP**
+## How it works
+
+```
+keywords (typed, or the trending US list)
+   │
+   ▼  eBay Browse API: search ~200 fixed-price listings per keyword
+   ▼  getItems (20 per call): lifetime sold + listing creation date
+   ▼  30-day demand estimate → shortlist listings at or above the threshold
+   ▼  AliExpress Affiliate API: product.query + hotproduct + smartmatch
+   ▼  hard gate: rating ≥ 4.7, reviews, orders, title match, landed cost < eBay, margin
+   ▼  top 3 sources saved per listing
+   ▼  daily cron: snapshot lifetime sold again → demand becomes measured
+```
+
+### Where "sold in the last 30 days" comes from
+
+eBay has no public API for 30-day sold counts. Marketplace Insights is Limited Release, and since July 2026 sold/completed search results require sign-in. The app therefore uses two sources, and every result carries a badge saying which one it came from.
+
+**1. Hybrid tracker (automatic, official Browse API only).** The tracker records each listing's lifetime `estimatedSoldQuantity` once a day.
+
+| Tier          | Computation                                                                                                | When                                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Estimated** | lifetime ÷ listing age × 30                                                                                | Day 0. Used to shortlist only, never a winner. |
+| **Projected** | (latest − first snapshot) ÷ days × 30                                                                      | After 3+ days of snapshots                     |
+| **Verified**  | Difference over 30 days of snapshots, **or** the listing is younger than 30 days (lifetime = last 30 days) | Day 30, or immediately for new listings        |
+
+**2. Terapeak import (manual, verified immediately).** In Seller Hub → Research → Product research, open the **Sold** tab. Copy the table (or export it) and paste or upload it on `/import`. Each row is linked to a live eBay listing by item ID or title. The row is marked Verified and then tracked and sourced like any other listing.
+
+A **winner** has Projected or Verified demand at or above the threshold, **and** at least one AliExpress source that passed the gate.
+
+### AliExpress gate
+
+A source must pass **all** of these:
+
+- Rating ≥ 4.7. A missing rating is a fail.
+- Reviews ≥ 20.
+- Orders ≥ 50.
+- Title-match confidence ≥ 70. This reuses the matcher in `src/lib/domain/matching.ts`: pack-size, accessory and context checks.
+- Landed cost below the eBay price.
+- Net margin ≥ 10% after eBay fees.
+
+Notes on the numbers:
+
+- The Affiliate API returns `evaluate_rate` as a percentage of positive feedback. It is converted as `% ÷ 20`, so 94% becomes 4.7★.
+- The Affiliate API does not return shipping. The **AE shipping estimate** from Settings is used instead and labelled "est." in the UI.
 
 ## Stack
 
-Next.js 15, TypeScript, Prisma on **Supabase Postgres**, Tailwind, Zod, Playwright, Vitest.
-
-Deploy notes: [`docs/deploy-supabase-vercel.md`](docs/deploy-supabase-vercel.md)
-
-## Why these packages
-
-| Package                   | Why                                 | Alternative considered                     |
-| ------------------------- | ----------------------------------- | ------------------------------------------ |
-| Prisma                    | Typed schema + migrations           | Drizzle — similar; Prisma chosen for speed |
-| Supabase Postgres         | Hosted DB for local + Vercel        | SQLite — not suitable for Vercel           |
-| Zod                       | Boundary validation                 | Manual checks — weaker                     |
-| Playwright                | Browser tests + optional collectors | Puppeteer — Playwright preferred           |
-| googleapis                | Official Sheets API                 | Community MCP — not for production         |
-| @modelcontextprotocol/sdk | Internal Phase 5 MCP                | Skip if unused                             |
-| Vitest                    | Fast unit tests                     | Jest — heavier                             |
+Next.js 15 (App Router), TypeScript, Prisma on Supabase Postgres, Tailwind + shadcn/base-ui, Zod, Vitest. Auth is Supabase with an email allowlist, or `AUTH_DISABLED=true` for local single-user mode.
 
 ## Quick start
 
 ```bash
-cp .env.example .env
-# Set DATABASE_URL + DIRECT_URL from Supabase Database settings
+cp .env.example .env      # DATABASE_URL, DIRECT_URL, eBay + AliExpress keys, CRON_SECRET
 npm install
-npx prisma generate
-npx playwright install chromium
-npm test
-npm run poc
-npm run dev
+npx prisma migrate deploy
+npm run dev               # http://localhost:3000
 ```
 
-Open http://localhost:3000
-
-Schema is applied on the linked Supabase project. See deploy doc for Vercel env vars.
-
-## PoC
+Run the tracker locally, or from any cron host:
 
 ```bash
-npm run poc
+npm run snapshot          # one ~50s pass
+npm run snapshot -- --all # until every due listing is snapshotted
 ```
 
-Writes `poc-output/poc-report.json`, CSV export, and a Playwright trace.
+There is **no fixture or sample data**. Without API keys, hunts stop with a clear configuration error.
 
-## MCP (Cursor, optional)
+## Scripts
 
-1. Copy [`docs/mcp/cursor-mcp.config.example.json`](docs/mcp/cursor-mcp.config.example.json) into Cursor MCP settings
-2. Add eBay / Google credentials outside the repo
-3. Follow [`docs/mcp/SMOKE_CHECKLIST.md`](docs/mcp/SMOKE_CHECKLIST.md)
+| Command                           | What                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `npm run dev` / `build` / `start` | Next.js                                                                   |
+| `npm test`                        | Vitest: demand tiers, Terapeak parser, sourcing gate, matching, providers |
+| `npm run lint` / `typecheck`      | ESLint / `tsc --noEmit`                                                   |
+| `npm run snapshot`                | Daily sold-snapshot tracker (same code as the Vercel cron)                |
+| `npm run db:migrate`              | `prisma migrate deploy`                                                   |
 
-Internal app MCP:
+## Layout
 
-```bash
-npm run dev   # terminal 1
-npm run mcp   # terminal 2 — stdio server
+```
+src/app/                   /            Hunt: run hunts, results table, CSV export
+                           /listings/[id] demand chart, top 3 AE sources, profit breakdown
+                           /import      Terapeak paste/CSV import
+                           /settings    thresholds and API status
+src/app/api/[...path]      single catch-all API router (Vercel Hobby function limit)
+src/lib/api-handlers/      hunts, listings, export, terapeak import, settings, cron
+src/lib/services/          hunt.ts (bounded steps), tracker.ts (cron), sourcing.ts, tracking.ts
+src/lib/domain/            demand.ts, sourcing.ts, terapeak-import.ts, matching.ts, profit.ts (pure, unit-tested)
+src/lib/providers/         ebay-browse.ts, aliexpress-official.ts
 ```
 
-Write tools require `RESEARCH_MCP_ALLOW_WRITES=true`.
+## Deploy
 
-## Definition of done (MVP)
-
-- Keyword / AliExpress URL scan
-- AliExpress qualification rules (configurable)
-- eBay matching with confidence
-- Honest sold-history reporting; no APPROVED without verified demand
-- Transparent profit breakdown
-- DB persistence + CSV / Sheets export
-- Failed collections with reason codes
-- Credentials never committed
-- Production path independent of Cursor
+See [`docs/deploy-supabase-vercel.md`](docs/deploy-supabase-vercel.md).

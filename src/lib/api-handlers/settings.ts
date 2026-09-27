@@ -1,75 +1,46 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { DEFAULT_RULES } from "@/lib/domain/types";
-import { z } from "zod";
+import { DEFAULT_HUNT_SETTINGS, integrationStatus, loadHuntSettings } from "@/lib/services/providers";
 
-const schema = z.object({
-  minimumRating: z.number().optional(),
-  preferredRating: z.number().optional(),
-  idealRating: z.number().optional(),
-  minimumReviewCount: z.number().int().optional(),
-  preferredReviewCount: z.number().int().optional(),
-  minimumOrderCount: z.number().int().optional(),
-  preferredOrderCount: z.number().int().optional(),
-  minimumRecentSales: z.number().int().optional(),
-  minSellThroughRate: z.number().min(0).max(100).optional(),
-  minimumProfitMinor: z.number().int().min(0).optional(),
-  minimumMatchConfidence: z.number().int().optional(),
-  minimumNetMarginPercent: z.number().optional(),
-  preferredNetMarginPercent: z.number().optional(),
-  additionalSourcingCostMinor: z.number().int().optional(),
-  ebayFeeRate: z.number().optional(),
-  promotedListingRate: z.number().optional(),
-  expectedReturnCostMinor: z.number().int().optional(),
-  expectedRefundCostMinor: z.number().int().optional(),
-  otherFixedCostsMinor: z.number().int().optional(),
-  otherPercentageCost: z.number().optional(),
-  currency: z.string().optional(),
-  ebayMarketplace: z.string().optional(),
-  shipToCountry: z.string().optional(),
-  scheduleCron: z.string().nullable().optional(),
-  autoExportOnApproval: z.boolean().optional(),
-  googleSpreadsheetId: z.string().nullable().optional(),
-});
+const schema = z
+  .object({
+    minSold30d: z.number().int().min(1).max(10_000),
+    minAeRating: z.number().min(0).max(5),
+    minAeReviews: z.number().int().min(0),
+    minAeOrders: z.number().int().min(0),
+    minMatchConfidence: z.number().int().min(0).max(100),
+    minMarginPct: z.number().min(-100).max(100),
+    ebayFeeRate: z.number().min(0).max(0.5),
+    aeShippingEstimateMinor: z.number().int().min(0),
+    extraCostMinor: z.number().int().min(0),
+    minEbayPriceMinor: z.number().int().min(0),
+    maxEbayPriceMinor: z.number().int().min(100),
+  })
+  .partial()
+  .refine((v) => v.minEbayPriceMinor == null || v.maxEbayPriceMinor == null || v.minEbayPriceMinor < v.maxEbayPriceMinor, {
+    message: "Minimum eBay price must be below the maximum",
+  });
 
 export async function GET() {
   const session = await requireSessionWorkspace();
   if (isNextResponse(session)) return session;
-
-  let settings = await prisma.workspaceSettings.findUnique({
-    where: { workspaceId: session.workspace.id },
-  });
-  if (!settings) {
-    settings = await prisma.workspaceSettings.create({
-      data: { workspaceId: session.workspace.id },
-    });
-  }
-  return NextResponse.json({ settings, defaults: DEFAULT_RULES });
+  const settings = await loadHuntSettings(session.workspace.id);
+  return NextResponse.json({ settings, defaults: DEFAULT_HUNT_SETTINGS, integrations: integrationStatus() });
 }
 
 export async function PUT(req: Request) {
   const session = await requireSessionWorkspace();
   if (isNextResponse(session)) return session;
-
-  const json = await req.json();
-  const parsed = schema.safeParse(json);
+  const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid settings" }, { status: 400 });
   }
-
-  let current = await prisma.workspaceSettings.findUnique({
+  await prisma.huntSettings.upsert({
     where: { workspaceId: session.workspace.id },
+    create: { workspaceId: session.workspace.id, ...parsed.data },
+    update: parsed.data,
   });
-  if (!current) {
-    current = await prisma.workspaceSettings.create({
-      data: { workspaceId: session.workspace.id },
-    });
-  }
-
-  const settings = await prisma.workspaceSettings.update({
-    where: { id: current.id },
-    data: parsed.data,
-  });
-  return NextResponse.json({ settings });
+  return NextResponse.json({ settings: await loadHuntSettings(session.workspace.id) });
 }

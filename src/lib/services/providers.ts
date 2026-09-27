@@ -1,87 +1,103 @@
 import { prisma } from "@/lib/db";
-import { DEFAULT_RULES, type QualificationRules } from "@/lib/domain/types";
-import { AliExpressManualImportProvider, sampleAliExpressCatalog } from "@/lib/providers/aliexpress-manual";
+import { DEFAULT_SOURCING_RULES } from "@/lib/domain/sourcing";
 import { AliExpressOfficialApiProvider } from "@/lib/providers/aliexpress-official";
 import { EbayBrowseApiProvider } from "@/lib/providers/ebay-browse";
-import type { AliExpressProvider, EbayProvider } from "@/lib/providers/types";
-import type { VisualMatchProvider } from "@/lib/providers/visual-match";
+import type { AliExpressProvider } from "@/lib/providers/types";
+
+export class ConfigError extends Error {
+  override name = "ConfigError";
+}
 
 export function createAliExpressProvider(): AliExpressProvider {
   const appKey = process.env.ALIEXPRESS_APP_KEY ?? "";
   const appSecret = process.env.ALIEXPRESS_APP_SECRET ?? "";
-  if (appKey && appSecret) {
-    return new AliExpressOfficialApiProvider({
-      appKey,
-      appSecret,
-      trackingId: process.env.ALIEXPRESS_TRACKING_ID ?? "default",
-      appSignature: process.env.ALIEXPRESS_APP_SIGNATURE,
-    });
+  if (!appKey || !appSecret) {
+    throw new ConfigError("AliExpress API keys missing: set ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET and ALIEXPRESS_TRACKING_ID.");
   }
-  return new AliExpressManualImportProvider(sampleAliExpressCatalog());
-}
-
-export function createEbayProvider(): EbayProvider {
-  return new EbayBrowseApiProvider({
-    clientId: process.env.EBAY_CLIENT_ID ?? "",
-    clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",
+  return new AliExpressOfficialApiProvider({
+    appKey,
+    appSecret,
+    trackingId: process.env.ALIEXPRESS_TRACKING_ID ?? "default",
+    appSignature: process.env.ALIEXPRESS_APP_SIGNATURE,
+    gatewayUrl: process.env.ALIEXPRESS_GATEWAY_URL || undefined,
   });
 }
 
-/** Lazy: avoids pulling ORT/transformers into light API routes. */
-export function createVisualMatchProvider(): VisualMatchProvider | undefined {
-  if (process.env.VISUAL_MATCH_ENABLED === "false") return undefined;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Dinov2VisualMatchProvider } = require("@/lib/providers/dinov2-visual-match") as typeof import("@/lib/providers/dinov2-visual-match");
-  return new Dinov2VisualMatchProvider();
+export function createEbayProvider(): EbayBrowseApiProvider {
+  const provider = new EbayBrowseApiProvider({
+    clientId: process.env.EBAY_CLIENT_ID ?? "",
+    clientSecret: process.env.EBAY_CLIENT_SECRET ?? "",
+    marketplaceId: process.env.EBAY_MARKETPLACE_ID || undefined,
+    // e.g. https://api.sandbox.ebay.com for sandbox keys
+    baseUrl: process.env.EBAY_API_BASE_URL || undefined,
+  });
+  if (!provider.configured) {
+    throw new ConfigError("eBay API keys missing: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET.");
+  }
+  return provider;
 }
 
-/** Legacy single-workspace helper for workers/tests when auth is disabled. */
+export function integrationStatus() {
+  return {
+    ebay: Boolean(process.env.EBAY_CLIENT_ID && process.env.EBAY_CLIENT_SECRET),
+    aliexpress: Boolean(process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_SECRET),
+    cron: Boolean(process.env.CRON_SECRET),
+  };
+}
+
+/** Single-workspace helper used when AUTH_DISABLED=true and by the CLI snapshot script. */
 export async function ensureDefaultWorkspace() {
   let user = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
   if (!user) {
-    user = await prisma.user.create({
-      data: { email: "operator@local.dev", name: "Local Operator" },
-    });
+    user = await prisma.user.create({ data: { email: "operator@local.dev", name: "Local Operator" } });
   }
   let workspace = await prisma.workspace.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
   if (!workspace) {
     workspace = await prisma.workspace.create({
-      data: {
-        name: "Default Workspace",
-        userId: user.id,
-        settings: { create: {} },
-      },
+      data: { name: "Default Workspace", userId: user.id, settings: { create: {} } },
     });
   }
   return workspace;
 }
 
-export async function loadWorkspaceRules(workspaceId?: string): Promise<QualificationRules> {
-  const id = workspaceId ?? (await ensureDefaultWorkspace()).id;
-  const settings = await prisma.workspaceSettings.findUnique({
-    where: { workspaceId: id },
+export type HuntSettingsValues = {
+  minSold30d: number;
+  minAeRating: number;
+  minAeReviews: number;
+  minAeOrders: number;
+  minMatchConfidence: number;
+  minMarginPct: number;
+  ebayFeeRate: number;
+  aeShippingEstimateMinor: number;
+  extraCostMinor: number;
+  minEbayPriceMinor: number;
+  maxEbayPriceMinor: number;
+};
+
+export const DEFAULT_HUNT_SETTINGS: HuntSettingsValues = {
+  minSold30d: 20,
+  ...DEFAULT_SOURCING_RULES,
+  minEbayPriceMinor: 800,
+  maxEbayPriceMinor: 15000,
+};
+
+export async function loadHuntSettings(workspaceId: string): Promise<HuntSettingsValues> {
+  const row = await prisma.huntSettings.upsert({
+    where: { workspaceId },
+    create: { workspaceId },
+    update: {},
   });
-  if (!settings) return { ...DEFAULT_RULES };
   return {
-    minimumRating: settings.minimumRating,
-    preferredRating: settings.preferredRating,
-    idealRating: settings.idealRating,
-    minimumReviewCount: settings.minimumReviewCount,
-    preferredReviewCount: settings.preferredReviewCount,
-    minimumOrderCount: settings.minimumOrderCount,
-    preferredOrderCount: settings.preferredOrderCount,
-    minimumRecentSales: settings.minimumRecentSales,
-    minSellThroughRate: settings.minSellThroughRate,
-    minimumProfitMinor: settings.minimumProfitMinor,
-    minimumMatchConfidence: settings.minimumMatchConfidence,
-    minimumNetMarginPercent: settings.minimumNetMarginPercent,
-    preferredNetMarginPercent: settings.preferredNetMarginPercent,
-    additionalSourcingCostMinor: settings.additionalSourcingCostMinor,
-    ebayFeeRate: settings.ebayFeeRate,
-    promotedListingRate: settings.promotedListingRate,
-    expectedReturnCostMinor: settings.expectedReturnCostMinor,
-    expectedRefundCostMinor: settings.expectedRefundCostMinor,
-    otherFixedCostsMinor: settings.otherFixedCostsMinor,
-    otherPercentageCost: settings.otherPercentageCost,
+    minSold30d: row.minSold30d,
+    minAeRating: row.minAeRating,
+    minAeReviews: row.minAeReviews,
+    minAeOrders: row.minAeOrders,
+    minMatchConfidence: row.minMatchConfidence,
+    minMarginPct: row.minMarginPct,
+    ebayFeeRate: row.ebayFeeRate,
+    aeShippingEstimateMinor: row.aeShippingEstimateMinor,
+    extraCostMinor: row.extraCostMinor,
+    minEbayPriceMinor: row.minEbayPriceMinor,
+    maxEbayPriceMinor: row.maxEbayPriceMinor,
   };
 }

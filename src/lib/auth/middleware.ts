@@ -48,6 +48,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/login") ||
     path.startsWith("/auth/") ||
     path.startsWith("/api/auth/logout") ||
+    // Protected by CRON_SECRET inside the handler.
+    path.startsWith("/api/cron/") ||
     path.startsWith("/_next") ||
     path === "/favicon.ico";
   const isApi = path.startsWith("/api/");

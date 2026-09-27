@@ -1,20 +1,103 @@
-import type { EbayDemandInput, EbayDemandResult, EbayListing, EbayListingDetails, ProductSearchInput } from "@/lib/domain/types";
-import { EbayMarketplaceInsightsProvider } from "./ebay-marketplace-insights";
-import type { EbayProvider } from "./types";
+import { legacyItemId } from "@/lib/domain/ebay-ids";
+
+/**
+ * eBay Browse API (official, public). Used for two things only:
+ *  1. keyword search of active fixed-price listings
+ *  2. batched getItems to read `estimatedSoldQuantity` (lifetime units sold) + `itemCreationDate`
+ *     for the daily sold-snapshot tracker.
+ */
+
+export interface EbaySearchInput {
+  keyword: string;
+  /** Total results wanted (paged 200 at a time; Browse caps offset+limit at 10,000). */
+  limit?: number;
+  minPriceMinor?: number;
+  maxPriceMinor?: number;
+}
+
+export interface EbaySearchResult {
+  itemId: string;
+  legacyItemId: string;
+  title: string;
+  url: string;
+  imageUrl?: string;
+  priceMinor: number;
+  shippingMinor?: number;
+  currency: string;
+}
+
+export interface EbayItemDetails extends EbaySearchResult {
+  estimatedSoldQuantity: number | null;
+  itemCreationDate: Date | null;
+  itemEndDate: Date | null;
+  outOfStock: boolean;
+}
+
+interface BrowseItem {
+  itemId: string;
+  legacyItemId?: string;
+  title: string;
+  itemWebUrl?: string;
+  image?: { imageUrl?: string };
+  price?: { value?: string; currency?: string };
+  shippingOptions?: Array<{ shippingCost?: { value?: string } }>;
+  itemCreationDate?: string;
+  itemEndDate?: string;
+  estimatedAvailabilities?: Array<{ estimatedSoldQuantity?: number; estimatedAvailabilityStatus?: string }>;
+}
 
 interface TokenCache {
   accessToken: string;
   expiresAt: number;
 }
 
-/**
- * eBay Browse API provider for active listings.
- * Demand (sold history) returns unavailable unless Insights is wired separately.
- */
-export class EbayBrowseApiProvider implements EbayProvider {
-  readonly name = "EbayBrowseApiProvider";
+export class EbayConfigError extends Error {}
+
+const PAGE_SIZE = 200;
+export const GET_ITEMS_BATCH = 20;
+
+function toMinor(value?: string): number | undefined {
+  if (value == null) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) : undefined;
+}
+
+function parseDate(value?: string): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function mapSummary(item: BrowseItem): EbaySearchResult {
+  const legacy = item.legacyItemId ?? legacyItemId(item.itemId);
+  return {
+    itemId: item.itemId,
+    legacyItemId: legacy,
+    title: item.title,
+    url: item.itemWebUrl?.split("?")[0] ?? `https://www.ebay.com/itm/${legacy}`,
+    imageUrl: item.image?.imageUrl,
+    priceMinor: toMinor(item.price?.value) ?? 0,
+    shippingMinor: toMinor(item.shippingOptions?.[0]?.shippingCost?.value),
+    currency: item.price?.currency ?? "USD",
+  };
+}
+
+export function mapItemDetails(item: BrowseItem): EbayItemDetails {
+  const sold = item.estimatedAvailabilities
+    ?.map((entry) => entry.estimatedSoldQuantity)
+    .find((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const status = item.estimatedAvailabilities?.[0]?.estimatedAvailabilityStatus;
+  return {
+    ...mapSummary(item),
+    estimatedSoldQuantity: sold ?? null,
+    itemCreationDate: parseDate(item.itemCreationDate),
+    itemEndDate: parseDate(item.itemEndDate),
+    outOfStock: status === "OUT_OF_STOCK",
+  };
+}
+
+export class EbayBrowseApiProvider {
   private tokenCache: TokenCache | null = null;
-  private readonly insights: EbayMarketplaceInsightsProvider;
 
   constructor(
     private readonly config: {
@@ -23,9 +106,7 @@ export class EbayBrowseApiProvider implements EbayProvider {
       marketplaceId?: string;
       baseUrl?: string;
     },
-  ) {
-    this.insights = new EbayMarketplaceInsightsProvider(config);
-  }
+  ) {}
 
   private get marketplaceId() {
     return this.config.marketplaceId ?? "EBAY_US";
@@ -35,20 +116,61 @@ export class EbayBrowseApiProvider implements EbayProvider {
     return this.config.baseUrl ?? "https://api.ebay.com";
   }
 
-  private get hasCredentials() {
+  get configured() {
     return Boolean(this.config.clientId && this.config.clientSecret);
   }
 
-  async searchProducts(input: ProductSearchInput): Promise<EbayListing[]> {
-    if (!this.hasCredentials) {
-      return this.fixtureSearch(input);
+  async searchProducts(input: EbaySearchInput): Promise<EbaySearchResult[]> {
+    const wanted = Math.min(Math.max(input.limit ?? PAGE_SIZE, 1), 1000);
+    const filters = ["buyingOptions:{FIXED_PRICE}", "conditions:{NEW}", "deliveryCountry:US"];
+    if (input.minPriceMinor != null || input.maxPriceMinor != null) {
+      const lo = input.minPriceMinor != null ? (input.minPriceMinor / 100).toFixed(2) : "";
+      const hi = input.maxPriceMinor != null ? (input.maxPriceMinor / 100).toFixed(2) : "";
+      filters.push(`price:[${lo}..${hi}]`, "priceCurrency:USD");
     }
-    const token = await this.getAppToken();
-    const limit = Math.min(input.limit ?? 10, 50);
-    const url = new URL(`${this.baseUrl}/buy/browse/v1/item_summary/search`);
-    url.searchParams.set("q", input.keyword);
-    url.searchParams.set("limit", String(limit));
 
+    const results = new Map<string, EbaySearchResult>();
+    for (let offset = 0; results.size < wanted; offset += PAGE_SIZE) {
+      const url = new URL(`${this.baseUrl}/buy/browse/v1/item_summary/search`);
+      url.searchParams.set("q", input.keyword);
+      url.searchParams.set("limit", String(Math.min(PAGE_SIZE, wanted)));
+      url.searchParams.set("offset", String(offset));
+      url.searchParams.set("filter", filters.join(","));
+      const data = (await this.request(url)) as { itemSummaries?: BrowseItem[]; total?: number };
+      const page = data.itemSummaries ?? [];
+      for (const item of page) {
+        const mapped = mapSummary(item);
+        // Variation listings appear once per variation; keep one row per legacy listing.
+        if (!results.has(mapped.legacyItemId)) results.set(mapped.legacyItemId, mapped);
+      }
+      if (page.length < PAGE_SIZE || offset + PAGE_SIZE >= (data.total ?? 0)) break;
+    }
+    return [...results.values()].slice(0, wanted);
+  }
+
+  /**
+   * Batched getItems (max 20 ids per call). Returns details keyed by the requested id.
+   * Ids absent from the result map were not returned by eBay (ended, removed, or invalid).
+   */
+  async getItemsBatch(itemIds: string[]): Promise<Map<string, EbayItemDetails>> {
+    const out = new Map<string, EbayItemDetails>();
+    const unique = [...new Set(itemIds)];
+    for (let i = 0; i < unique.length; i += GET_ITEMS_BATCH) {
+      const chunk = unique.slice(i, i + GET_ITEMS_BATCH);
+      const url = new URL(`${this.baseUrl}/buy/browse/v1/item/`);
+      url.searchParams.set("item_ids", chunk.join(","));
+      const data = (await this.request(url, { allow404: true })) as { items?: BrowseItem[] } | null;
+      const byLegacy = new Map((data?.items ?? []).map((item) => [item.legacyItemId ?? legacyItemId(item.itemId), item]));
+      for (const id of chunk) {
+        const item = (data?.items ?? []).find((it) => it.itemId === id) ?? byLegacy.get(legacyItemId(id));
+        if (item) out.set(id, mapItemDetails(item));
+      }
+    }
+    return out;
+  }
+
+  private async request(url: URL, options?: { allow404?: boolean }): Promise<unknown> {
+    const token = await this.getAppToken();
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -56,169 +178,17 @@ export class EbayBrowseApiProvider implements EbayProvider {
         "X-EBAY-C-MARKETPLACE-ID": this.marketplaceId,
       },
     });
+    if (res.status === 404 && options?.allow404) return null;
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Browse search failed: ${res.status} ${body}`);
+      throw new Error(`eBay Browse ${url.pathname} failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
     }
-    const data = (await res.json()) as {
-      itemSummaries?: Array<{
-        itemId: string;
-        title: string;
-        itemWebUrl?: string;
-        image?: { imageUrl?: string };
-        price?: { value?: string; currency?: string };
-        shippingOptions?: Array<{ shippingCost?: { value?: string } }>;
-        condition?: string;
-        seller?: { username?: string };
-        itemLocation?: { country?: string };
-        categories?: Array<{ categoryId?: string }>;
-      }>;
-    };
-    const now = new Date().toISOString();
-    return (data.itemSummaries ?? []).map((item) => ({
-      itemId: item.itemId,
-      title: item.title,
-      url: item.itemWebUrl ?? `https://www.ebay.com/itm/${item.itemId}`,
-      imageUrl: item.image?.imageUrl,
-      priceMinor: Math.round(Number(item.price?.value ?? 0) * 100),
-      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value
-        ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100)
-        : undefined,
-      currency: item.price?.currency ?? "USD",
-      condition: item.condition,
-      sellerUsername: item.seller?.username,
-      sellerLocation: item.itemLocation?.country,
-      categoryId: item.categories?.[0]?.categoryId,
-      meta: {
-        source: this.name,
-        confidence: 0.95,
-        collectedAt: now,
-        completeness: "partial" as const,
-        warnings: [],
-        rawRecordRef: item.itemId,
-      },
-    }));
-  }
-
-  async getListingDetails(itemId: string): Promise<EbayListingDetails> {
-    if (!this.hasCredentials) {
-      const list = await this.fixtureSearch({ keyword: itemId, limit: 1 });
-      if (!list[0]) throw new Error(`Fixture listing not found: ${itemId}`);
-      return list[0];
-    }
-    const token = await this.getAppToken();
-    const res = await fetch(`${this.baseUrl}/buy/browse/v1/item/${encodeURIComponent(itemId)}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-EBAY-C-MARKETPLACE-ID": this.marketplaceId,
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`getItem failed: ${res.status} ${await res.text()}`);
-    }
-    const item = (await res.json()) as {
-      itemId: string;
-      title: string;
-      itemWebUrl?: string;
-      image?: { imageUrl?: string };
-      price?: { value?: string; currency?: string };
-      shippingOptions?: Array<{ shippingCost?: { value?: string } }>;
-      condition?: string;
-      seller?: { username?: string };
-      itemLocation?: { country?: string };
-      categoryPath?: string;
-      categoryId?: string;
-      estimatedAvailabilities?: Array<{ estimatedSoldQuantity?: number }>;
-    };
-    const now = new Date().toISOString();
-    const estimatedSoldQuantity = item.estimatedAvailabilities
-      ?.map((entry) => entry.estimatedSoldQuantity)
-      .find((value): value is number => typeof value === "number" && Number.isFinite(value));
-    return {
-      itemId: item.itemId,
-      title: item.title,
-      url: item.itemWebUrl ?? `https://www.ebay.com/itm/${item.itemId}`,
-      imageUrl: item.image?.imageUrl,
-      priceMinor: Math.round(Number(item.price?.value ?? 0) * 100),
-      shippingMinor: item.shippingOptions?.[0]?.shippingCost?.value
-        ? Math.round(Number(item.shippingOptions[0].shippingCost.value) * 100)
-        : undefined,
-      currency: item.price?.currency ?? "USD",
-      condition: item.condition,
-      sellerUsername: item.seller?.username,
-      sellerLocation: item.itemLocation?.country,
-      categoryId: item.categoryId,
-      estimatedSoldQuantity,
-      meta: {
-        source: this.name,
-        confidence: 0.98,
-        collectedAt: now,
-        completeness: "full",
-        warnings: estimatedSoldQuantity == null ? ["estimatedSoldQuantity missing on item"] : [],
-        rawRecordRef: item.itemId,
-      },
-    };
-  }
-
-  async getMarketDemand(input: EbayDemandInput): Promise<EbayDemandResult> {
-    const now = new Date().toISOString();
-    if (process.env.EBAY_INSIGHTS_ENABLED !== "false" && this.hasCredentials) {
-      const insightsDemand = await this.insights.getMarketDemand(input);
-      if (insightsDemand.available) return insightsDemand;
-    }
-
-    if (
-      process.env.EBAY_PURCHASE_HISTORY_FETCH_ENABLED !== "false" &&
-      process.env.EBAY_PURCHASE_HISTORY_COOKIE?.trim() &&
-      input.itemId
-    ) {
-      try {
-        const { fetchEbayPurchaseHistory } = await import("@/lib/providers/ebay-purchase-history");
-        const history = await fetchEbayPurchaseHistory({ itemIdOrUrl: input.itemId });
-        if (history.available) {
-          return {
-            available: true,
-            soldLast30Days: history.soldLast30Days,
-            sold7d: history.sold7d,
-            sold90d: history.sold90d,
-            sold365d: history.sold365d,
-            avgCompletedSaleMinor: history.avgCompletedSaleMinor ?? undefined,
-            medianCompletedSaleMinor: history.medianCompletedSaleMinor ?? undefined,
-            source: `purchase_history:${history.source}`,
-            meta: {
-              source: this.name,
-              confidence: 0.7,
-              collectedAt: now,
-              completeness: "partial",
-              warnings: history.warnings,
-              rawRecordRef: history.evidenceUrl ?? input.itemId,
-            },
-          };
-        }
-      } catch {
-        /* purchase history is optional */
-      }
-    }
-
-    // Browse cannot supply verified 30-day sold history; Insights is Limited Release (often 403).
-    return {
-      available: false,
-      source: "EbayBrowseApiProvider",
-      reasonCode: "EBAY_SOLD_HISTORY_UNAVAILABLE",
-      meta: {
-        source: this.name,
-        confidence: 0,
-        collectedAt: now,
-        completeness: "minimal",
-        warnings: [
-          "Sold history requires Marketplace Insights, purchase-history fetch, or manual validation",
-          `insightsAccess=${this.insights.accessState}`,
-        ],
-      },
-    };
+    return res.json();
   }
 
   private async getAppToken(): Promise<string> {
+    if (!this.configured) {
+      throw new EbayConfigError("eBay API keys missing: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET.");
+    }
     if (this.tokenCache && this.tokenCache.expiresAt > Date.now() + 60_000) {
       return this.tokenCache.accessToken;
     }
@@ -240,125 +210,5 @@ export class EbayBrowseApiProvider implements EbayProvider {
       expiresAt: Date.now() + data.expires_in * 1000,
     };
     return data.access_token;
-  }
-
-  private fixtureSearch(input: ProductSearchInput): EbayListing[] {
-    const now = new Date().toISOString();
-    const fixtures: EbayListing[] = [
-      {
-        itemId: "v1|1100001|0",
-        title: "Portable Rechargeable Blender USB Mini Smoothie Maker New",
-        url: "https://www.ebay.com/itm/1100001",
-        imageUrl: "https://via.placeholder.com/200",
-        priceMinor: 2499,
-        shippingMinor: 0,
-        currency: "USD",
-        condition: "NEW",
-        sellerUsername: "fixture_seller",
-        sellerLocation: "US",
-        categoryId: "20667",
-        meta: {
-          source: "ebay_fixture",
-          confidence: 0.8,
-          collectedAt: now,
-          completeness: "partial",
-          warnings: ["Using fixture data — set EBAY_CLIENT_ID/SECRET for live Browse API"],
-        },
-      },
-      {
-        itemId: "v1|1100002|0",
-        title: "Portable Blender Bottle 6 Blades Rechargeable Personal",
-        url: "https://www.ebay.com/itm/1100002",
-        priceMinor: 2799,
-        shippingMinor: 399,
-        currency: "USD",
-        condition: "NEW",
-        sellerUsername: "fixture_seller2",
-        categoryId: "20667",
-        meta: {
-          source: "ebay_fixture",
-          confidence: 0.8,
-          collectedAt: now,
-          completeness: "partial",
-          warnings: ["fixture"],
-        },
-      },
-      {
-        itemId: "v1|1100005|0",
-        title: "Portable Rechargeable Personal Blender 400ml USB",
-        url: "https://www.ebay.com/itm/1100005",
-        priceMinor: 3299,
-        shippingMinor: 0,
-        currency: "USD",
-        condition: "NEW",
-        sellerUsername: "fixture_seller5",
-        categoryId: "20667",
-        meta: {
-          source: "ebay_fixture",
-          confidence: 0.8,
-          collectedAt: now,
-          completeness: "partial",
-          warnings: ["fixture"],
-        },
-      },
-      {
-        itemId: "v1|1100003|0",
-        title: "Used Portable Blender Replacement Blade Only",
-        url: "https://www.ebay.com/itm/1100003",
-        priceMinor: 599,
-        currency: "USD",
-        condition: "USED",
-        sellerUsername: "fixture_seller3",
-        meta: {
-          source: "ebay_fixture",
-          confidence: 0.5,
-          collectedAt: now,
-          completeness: "partial",
-          warnings: ["likely mismatch"],
-        },
-      },
-    ];
-    const tokens = input.keyword
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((t) => t.length > 2);
-    return fixtures
-      .filter((f) => {
-        const title = f.title.toLowerCase();
-        return tokens.some((t) => title.includes(t)) || title.includes("blender");
-      })
-      .slice(0, input.limit ?? 10);
-  }
-}
-
-/** Manual demand entry — the MVP-approved path when Insights is unavailable. */
-export class EbayManualDemandProvider {
-  readonly name = "EbayManualDemandProvider";
-
-  toDemandResult(observation: {
-    soldLast30Days: number;
-    avgCompletedSaleMinor?: number;
-    medianCompletedSaleMinor?: number;
-    totalHistoricalSold?: number;
-    evidenceUrl?: string;
-    verifiedBy?: string;
-  }): EbayDemandResult {
-    const now = new Date().toISOString();
-    return {
-      available: true,
-      soldLast30Days: observation.soldLast30Days,
-      avgCompletedSaleMinor: observation.avgCompletedSaleMinor,
-      medianCompletedSaleMinor: observation.medianCompletedSaleMinor,
-      totalHistoricalSold: observation.totalHistoricalSold,
-      source: this.name,
-      meta: {
-        source: this.name,
-        confidence: 1,
-        collectedAt: now,
-        completeness: "partial",
-        warnings: observation.evidenceUrl ? [] : ["No evidence URL provided"],
-        rawRecordRef: observation.evidenceUrl,
-      },
-    };
   }
 }
