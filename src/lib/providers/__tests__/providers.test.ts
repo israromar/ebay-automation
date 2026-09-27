@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toCsv } from "@/lib/export/csv";
 import { AliExpressOfficialApiProvider } from "@/lib/providers/aliexpress-official";
-import { EbayBrowseApiProvider, EbayConfigError, mapItemDetails } from "@/lib/providers/ebay-browse";
+import { EbayAccessError, EbayBrowseApiProvider, EbayConfigError, isEbayBatchAvailable, mapItemDetails } from "@/lib/providers/ebay-browse";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -66,6 +66,52 @@ describe("EbayBrowseApiProvider", () => {
     const search = new URL(calls.find((c) => c.includes("item_summary"))!);
     expect(search.searchParams.get("filter")).toContain("buyingOptions:{FIXED_PRICE}");
     expect(search.searchParams.get("filter")).toContain("price:[8.00..150.00]");
+  });
+});
+
+describe("EbayBrowseApiProvider without batch getItems access", () => {
+  // Runs after the batch test above: the fallback is remembered for the rest of the process.
+  it("falls back to single getItem calls when item_ids returns 403, and skips missing items", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        calls.push(url);
+        if (url.includes("oauth2/token")) return jsonResponse({ access_token: "tok", expires_in: 7200 });
+        if (url.includes("item_ids=")) {
+          return jsonResponse(
+            { errors: [{ errorId: 1100, message: "Access denied", longMessage: "Insufficient permissions to fulfill the request." }] },
+            403,
+          );
+        }
+        const id = decodeURIComponent(new URL(url).pathname.split("/").pop()!);
+        if (id.includes("404")) return jsonResponse({ errors: [{ errorId: 11001 }] }, 404);
+        return jsonResponse({ itemId: id, title: id, estimatedAvailabilities: [{ estimatedSoldQuantity: 7 }] });
+      }),
+    );
+    const ebay = new EbayBrowseApiProvider({ clientId: "id", clientSecret: "secret" });
+    const details = await ebay.getItemsBatch(["v1|111111111|0", "v1|222222222|0", "v1|404404404|0"]);
+    expect(isEbayBatchAvailable()).toBe(false);
+    expect([...details.keys()]).toEqual(["v1|111111111|0", "v1|222222222|0"]);
+    expect(details.get("v1|111111111|0")?.estimatedSoldQuantity).toBe(7);
+
+    calls.length = 0;
+    await ebay.getItemsBatch(["v1|333333333|0"]);
+    expect(calls.some((c) => c.includes("item_ids="))).toBe(false);
+  });
+
+  it("raises EbayAccessError (not a retryable error) when search itself is forbidden", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) =>
+        String(input).includes("oauth2/token")
+          ? jsonResponse({ access_token: "tok", expires_in: 7200 })
+          : jsonResponse({ errors: [] }, 403),
+      ),
+    );
+    const ebay = new EbayBrowseApiProvider({ clientId: "id", clientSecret: "secret" });
+    await expect(ebay.searchProducts({ keyword: "x" })).rejects.toBeInstanceOf(EbayAccessError);
   });
 });
 

@@ -1,12 +1,7 @@
 import { createHash, createHmac } from "crypto";
 import sharp from "sharp";
 import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } from "@/lib/domain/types";
-import type {
-  AliExpressHotProductInput,
-  AliExpressImageSearchInput,
-  AliExpressProvider,
-  AliExpressSmartMatchInput,
-} from "./types";
+import type { AliExpressHotProductInput, AliExpressImageSearchInput, AliExpressProvider, AliExpressSmartMatchInput } from "./types";
 
 type GatewayParams = Record<string, string | number | boolean | undefined | null>;
 

@@ -5,7 +5,14 @@ import { toBrowseItemId } from "@/lib/domain/ebay-ids";
 import { jaccardSimilarity, tokenSet } from "@/lib/domain/matching";
 import type { TerapeakRow } from "@/lib/domain/terapeak-import";
 import { logError, logInfo } from "@/lib/logger";
-import { GET_ITEMS_BATCH, type EbayBrowseApiProvider, type EbayItemDetails, type EbaySearchResult } from "@/lib/providers/ebay-browse";
+import {
+  EbayAccessError,
+  GET_ITEMS_BATCH,
+  isEbayBatchAvailable,
+  type EbayBrowseApiProvider,
+  type EbayItemDetails,
+  type EbaySearchResult,
+} from "@/lib/providers/ebay-browse";
 import type { AliExpressProvider } from "@/lib/providers/types";
 import { ConfigError, createAliExpressProvider, createEbayProvider, loadHuntSettings, type HuntSettingsValues } from "./providers";
 import { mapWithConcurrency, sourceListing } from "./sourcing";
@@ -17,6 +24,15 @@ const SOURCE_PER_STEP = 6;
 const TERAPEAK_ROWS_PER_STEP = 20;
 /** eBay results scanned per keyword. */
 const RESULTS_PER_KEYWORD = 200;
+/**
+ * Listings per keyword whose sold count is read (in eBay best-match order). With batch getItems that
+ * is 10 calls; with single getItem calls it is 1 call per listing, so the default is lower.
+ */
+function detailsPerKeyword() {
+  const fromEnv = Number(process.env.EBAY_DETAILS_PER_KEYWORD);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.min(Math.floor(fromEnv), RESULTS_PER_KEYWORD);
+  return isEbayBatchAvailable() ? RESULTS_PER_KEYWORD : 100;
+}
 /** Listings estimated at ≥ this share of the threshold are tracked (not sourced) so snapshots can confirm them. */
 const WATCH_SHARE = 0.5;
 /** Leave headroom under the 60s serverless limit. */
@@ -139,9 +155,13 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const raw = error instanceof Error ? error.message : String(error);
+    const message =
+      error instanceof EbayAccessError
+        ? `eBay denied access (${error.status}). Check that EBAY_CLIENT_ID / EBAY_CLIENT_SECRET are a Production keyset with the Buy → Browse API. ${raw}`
+        : raw;
     logError("hunt_step_failed", { huntId, message });
-    const fatal = error instanceof ConfigError;
+    const fatal = error instanceof ConfigError || error instanceof EbayAccessError;
     return prisma.hunt.update({
       where: { id: huntId },
       data: {
@@ -185,7 +205,7 @@ async function sourcePending(
 async function fetchDetails(ebay: EbayBrowseApiProvider, ids: string[], deadline: number): Promise<Map<string, EbayItemDetails>> {
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += GET_ITEMS_BATCH) chunks.push(ids.slice(i, i + GET_ITEMS_BATCH));
-  const results = await mapWithConcurrency(chunks, 4, (chunk) => ebay.getItemsBatch(chunk), deadline);
+  const results = await mapWithConcurrency(chunks, 2, (chunk) => ebay.getItemsBatch(chunk), deadline);
   const merged = new Map<string, EbayItemDetails>();
   for (const r of results) {
     if (r?.status === "fulfilled") for (const [k, v] of r.value) merged.set(k, v);
@@ -208,11 +228,18 @@ async function discoverKeyword(
     minPriceMinor: settings.minEbayPriceMinor,
     maxPriceMinor: settings.maxEbayPriceMinor,
   });
-  const details = await fetchDetails(
+  // Probe with the first chunk so a batch→single fallback applies to the size limit below.
+  const first = await fetchDetails(
     ebay,
-    results.map((r) => r.itemId),
+    results.slice(0, GET_ITEMS_BATCH).map((r) => r.itemId),
     deadline,
   );
+  const rest = await fetchDetails(
+    ebay,
+    results.slice(GET_ITEMS_BATCH, detailsPerKeyword()).map((r) => r.itemId),
+    deadline,
+  );
+  const details = new Map([...first, ...rest]);
 
   const existing = await prisma.trackedListing.findMany({
     where: { workspaceId: hunt.workspaceId, ebayItemId: { in: results.map((r) => r.legacyItemId) } },
@@ -262,7 +289,7 @@ async function discoverKeyword(
       tracked += 1;
     }
   }
-  return { scanned: results.length, shortlisted, watching, tracked };
+  return { scanned: details.size, shortlisted, watching, tracked };
 }
 
 function pseudoItemId(title: string): string {
