@@ -70,6 +70,8 @@ npm run snapshot          # one ~50s pass
 npm run snapshot -- --all # until every due listing is snapshotted
 ```
 
+After pulling changes that touch `prisma/schema.prisma`, **stop `npm run dev`**, run `npx prisma generate && npx prisma migrate deploy`, and start it again. A running dev server keeps the old Prisma client loaded, and the API says so.
+
 There is **no fixture or sample data**. Without API keys, hunts stop with a clear configuration error.
 
 ## Scripts

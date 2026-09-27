@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { describeDatabaseError } from "@/lib/db";
 
 /**
  * Single catch-all so Vercel Hobby stays under the serverless-function limit.
@@ -64,9 +65,10 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path?: string[]
     }
     return await handler(req);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[api]", message);
-    const status = error instanceof Error && error.name === "ConfigError" ? 503 : 500;
+    const setupMessage = describeDatabaseError(error);
+    const message = setupMessage ?? (error instanceof Error ? error.message : String(error));
+    console.error("[api]", error instanceof Error ? error.message : String(error));
+    const status = setupMessage || (error instanceof Error && error.name === "ConfigError") ? 503 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
