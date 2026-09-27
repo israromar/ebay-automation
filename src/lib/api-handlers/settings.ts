@@ -13,6 +13,8 @@ const schema = z.object({
   minimumOrderCount: z.number().int().optional(),
   preferredOrderCount: z.number().int().optional(),
   minimumRecentSales: z.number().int().optional(),
+  minSellThroughRate: z.number().min(0).max(100).optional(),
+  minimumProfitMinor: z.number().int().min(0).optional(),
   minimumMatchConfidence: z.number().int().optional(),
   minimumNetMarginPercent: z.number().optional(),
   preferredNetMarginPercent: z.number().optional(),

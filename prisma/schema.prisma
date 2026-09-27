@@ -39,7 +39,9 @@ model WorkspaceSettings {
   preferredReviewCount     Int       @default(30)
   minimumOrderCount        Int       @default(50)
   preferredOrderCount      Int       @default(100)
-  minimumRecentSales       Int       @default(5)
+  minimumRecentSales       Int       @default(30)
+  minSellThroughRate       Float     @default(0.2)
+  minimumProfitMinor       Int       @default(0)
   minimumMatchConfidence   Int       @default(70)
   minimumNetMarginPercent  Float     @default(10)
   preferredNetMarginPercent Float    @default(15)
@@ -139,6 +141,9 @@ model ProductCandidate {
   returnOnCostPercent   Float?
   rejectionReasonsJson  String?
   demandVerified        Boolean             @default(false)
+  opportunityScore      Int?
+  classification        String?
+  researchSnapshotJson  String?
   dataSource            String?
   lastVerifiedAt        DateTime?
   createdAt             DateTime            @default(now())
@@ -188,7 +193,12 @@ model TrendIdea {
   priceMedianMinor     Int?
   soldLast30Days       Int?
   soldCountSource      String?
+  sellerCount          Int?
+  topSellerListingShare Float?
   score                Float
+  opportunityScore     Int?
+  classification       String?
+  researchSnapshotJson String?
   status               String            @default("DISCOVERED")
   dataSource           String            @default("ebay_browse_proxy")
   productCandidateId   String?

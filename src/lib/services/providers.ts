@@ -71,6 +71,8 @@ export async function loadWorkspaceRules(workspaceId?: string): Promise<Qualific
     minimumOrderCount: settings.minimumOrderCount,
     preferredOrderCount: settings.preferredOrderCount,
     minimumRecentSales: settings.minimumRecentSales,
+    minSellThroughRate: settings.minSellThroughRate,
+    minimumProfitMinor: settings.minimumProfitMinor,
     minimumMatchConfidence: settings.minimumMatchConfidence,
     minimumNetMarginPercent: settings.minimumNetMarginPercent,
     preferredNetMarginPercent: settings.preferredNetMarginPercent,

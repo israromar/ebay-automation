@@ -52,6 +52,8 @@ interface TrendIdea {
   priceMaxMinor: number | null;
   priceMedianMinor: number | null;
   score: number;
+  opportunityScore?: number | null;
+  classification?: string | null;
   status: string;
   productCandidateId: string | null;
   soldLast30Days?: number | null;
@@ -894,7 +896,9 @@ function ResearchPageInner() {
               <th className="px-3 py-2">
                 <input type="checkbox" onChange={toggleAllMatchable} aria-label="Select all matchable ideas" />
               </th>
-              <th className="px-3 py-2">Score</th>
+              <th className="px-3 py-2" title="Browse cluster score used to rank discovery. Not the opportunity score.">
+                Cluster
+              </th>
               <th className="px-3 py-2">Product</th>
               <th className="px-3 py-2">Keyword</th>
               <th className="px-3 py-2">Price / band</th>
@@ -905,6 +909,7 @@ function ResearchPageInner() {
               >
                 Sold
               </th>
+              <th className="px-3 py-2">Opportunity</th>
               <th className="px-3 py-2">Visual match</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Actions</th>
@@ -913,7 +918,7 @@ function ResearchPageInner() {
           <tbody>
             {ideas.length === 0 && (
               <tr>
-                <td colSpan={10} className="p-0">
+                <td colSpan={11} className="p-0">
                   <div className="relative m-3 overflow-hidden rounded-xl">
                     <Image
                       src="/media/overview-empty.jpg"
@@ -982,7 +987,7 @@ function ResearchPageInner() {
                   {typeof idea.soldLast30Days === "number" ? (
                     <span
                       className={
-                        idea.soldLast30Days >= 5
+                        idea.soldCountSource !== "browse_estimate" && idea.soldLast30Days >= 30
                           ? "font-semibold text-emerald-800"
                           : idea.soldLast30Days > 0
                             ? "font-medium text-foreground"
@@ -1008,6 +1013,10 @@ function ResearchPageInner() {
                       —
                     </span>
                   )}
+                </td>
+                <td className="px-3 py-3 tabular-nums">
+                  {idea.opportunityScore ?? "—"}
+                  {idea.classification ? <div className="text-[10px] text-muted-foreground">{idea.classification}</div> : null}
                 </td>
                 <td className="min-w-28 px-3 py-3">
                   {idea.aeMatch?.visualAvailable && idea.aeMatch.visualScore != null ? (

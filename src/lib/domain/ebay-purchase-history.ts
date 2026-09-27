@@ -13,6 +13,12 @@ export type EbayPurchaseHistoryParseResult = {
   evidenceUrl: string | null;
   purchases: EbayPurchaseRow[];
   soldLast30Days: number;
+  /** Null when no purchase rows were parsed. */
+  sold7d: number | null;
+  /** Null unless the oldest parsed sale is at least 90 days old. */
+  sold90d: number | null;
+  /** Null unless the oldest parsed sale is at least 365 days old. */
+  sold365d: number | null;
   avgCompletedSaleMinor: number | null;
   medianCompletedSaleMinor: number | null;
   windowDays: number;
@@ -179,7 +185,12 @@ export function parseEbayPurchaseHistoryHtml(
     }
   }
 
-  const windowMs = windowDays * 24 * 60 * 60 * 1000;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const unitsSince = (days: number) => {
+    const cutoff = now.getTime() - days * dayMs;
+    return purchases.filter((p) => p.purchasedAt.getTime() >= cutoff).reduce((sum, p) => sum + p.quantity, 0);
+  };
+  const windowMs = windowDays * dayMs;
   const cutoff = now.getTime() - windowMs;
   const recent = purchases.filter((p) => p.purchasedAt.getTime() >= cutoff);
   const soldLast30Days = recent.reduce((sum, p) => sum + p.quantity, 0);
@@ -187,14 +198,28 @@ export function parseEbayPurchaseHistoryHtml(
   const avgCompletedSaleMinor =
     unitPrices.length > 0 ? Math.round(unitPrices.reduce((a, b) => a + b, 0) / unitPrices.length) : null;
 
+  const oldest = purchases.reduce<number | null>((min, row) => {
+    const time = row.purchasedAt.getTime();
+    return min == null || time < min ? time : min;
+  }, null);
+  const coverageDays = oldest == null ? 0 : (now.getTime() - oldest) / dayMs;
+  const sold7d = purchases.length > 0 ? unitsSince(7) : null;
+  const sold90d = coverageDays >= 90 ? unitsSince(90) : null;
+  const sold365d = coverageDays >= 365 ? unitsSince(365) : null;
+
   if (purchases.length === 0) warnings.push("no_purchase_rows_parsed");
   else if (recent.length === 0) warnings.push("no_sales_in_window");
+  if (purchases.length > 0 && sold90d == null) warnings.push("window_90d_not_covered");
+  if (purchases.length > 0 && sold365d == null) warnings.push("window_365d_not_covered");
 
   return {
     itemId,
     evidenceUrl,
     purchases,
     soldLast30Days,
+    sold7d,
+    sold90d,
+    sold365d,
     avgCompletedSaleMinor,
     medianCompletedSaleMinor: medianMinor(unitPrices),
     windowDays,

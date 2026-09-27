@@ -35,6 +35,8 @@ export default function SettingsPage() {
     { key: "minimumReviewCount", label: "Minimum reviews" },
     { key: "minimumOrderCount", label: "Minimum orders" },
     { key: "minimumRecentSales", label: "Minimum sold last 30 days" },
+    { key: "minSellThroughRate", label: "Minimum sell-through (sold / active listings)", step: "0.01" },
+    { key: "minimumProfitMinor", label: "Minimum profit (minor units)" },
     { key: "minimumMatchConfidence", label: "Minimum match confidence" },
     { key: "minimumNetMarginPercent", label: "Minimum net margin %" },
     { key: "preferredNetMarginPercent", label: "Preferred net margin %" },

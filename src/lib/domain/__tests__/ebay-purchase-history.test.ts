@@ -57,10 +57,25 @@ describe("ebay purchase history parse", () => {
     expect(result.purchases).toHaveLength(3);
     // 1 + 2 in window; June row excluded
     expect(result.soldLast30Days).toBe(3);
+    expect(result.sold7d).toBe(1);
+    expect(result.sold90d).toBeNull();
+    expect(result.sold365d).toBeNull();
     // prices: 1201, 1150, 1150 → avg 1167
     expect(result.avgCompletedSaleMinor).toBe(1167);
     expect(result.medianCompletedSaleMinor).toBe(1150);
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toEqual(["window_90d_not_covered", "window_365d_not_covered"]);
+  });
+
+  it("counts 90-day sales only when the oldest row covers that window", () => {
+    const html = SAMPLE_HTML.replace("01 Jun 2026", "01 Apr 2026");
+    const result = parseEbayPurchaseHistoryHtml(html, {
+      itemIdOrUrl: "178349261747",
+      now: new Date("2026-07-31T12:00:00.000Z"),
+    });
+    expect(result.sold90d).toBe(3);
+    expect(result.sold365d).toBeNull();
+    expect(result.warnings).toContain("window_365d_not_covered");
+    expect(result.warnings).not.toContain("window_90d_not_covered");
   });
 
   it("flags login walls when no purchase table is present", () => {

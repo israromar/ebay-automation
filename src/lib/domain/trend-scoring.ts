@@ -41,6 +41,8 @@ export interface ScoredTrendIdea {
   priceMinMinor: number;
   priceMaxMinor: number;
   priceMedianMinor: number;
+  sellerCount: number | null;
+  topSellerListingShare: number | null;
   score: number;
 }
 
@@ -72,6 +74,15 @@ export function clusterKeyFromTitle(title: string): string {
     .filter((t) => t.length > 2)
     .slice(0, 5)
     .join("_");
+}
+
+export function sellerListingStats(listings: EbayListing[]): { sellerCount: number | null; topSellerListingShare: number | null } {
+  const names = listings.map((listing) => listing.sellerUsername).filter((name): name is string => Boolean(name));
+  if (names.length === 0 || listings.length === 0) return { sellerCount: null, topSellerListingShare: null };
+  const counts = new Map<string, number>();
+  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
+  const top = Math.max(...counts.values());
+  return { sellerCount: counts.size, topSellerListingShare: top / listings.length };
 }
 
 export function medianMinor(values: number[]): number {
@@ -135,6 +146,7 @@ export function scoreClustersForKeyword(keyword: string, listings: EbayListing[]
     )[0];
     if (!seed) continue;
 
+    const sellers = sellerListingStats(cluster.listings);
     ideas.push({
       ebayItemId: seed.itemId,
       title: seed.title,
@@ -149,6 +161,8 @@ export function scoreClustersForKeyword(keyword: string, listings: EbayListing[]
       priceMinMinor: cluster.priceMinMinor,
       priceMaxMinor: cluster.priceMaxMinor,
       priceMedianMinor: cluster.priceMedianMinor,
+      sellerCount: sellers.sellerCount,
+      topSellerListingShare: sellers.topSellerListingShare,
       score: opportunityScore({
         clusterSize: active,
         priceMinMinor: cluster.priceMinMinor,

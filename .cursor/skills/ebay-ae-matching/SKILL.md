@@ -13,7 +13,7 @@ description: >-
 
 ## Product goal
 
-Find AE sources that are the **same product kit**, **cheaper landed cost than eBay**, and **profitable after fees**. A text-similar but wrong/expensive source is a failure.
+Find AE sources that are the **same product kit**, **within the maximum acceptable landed cost**, and **profitable after fees**. A text-similar but wrong or unprofitable source is a failure. `matchConfidence` measures sameness only.
 
 ## Diagnose before coding
 
@@ -38,7 +38,7 @@ When the user says a match is wrong, classify first:
 3. **Preserve kit quantity in queries.** Multi-piece titles need a leading `Npcpcs …` query, with or without seed keyword.
 4. **Pack parse must handle hyphens/unicode dashes.** `11-Piece` / `11–Piece` → `11`. Unknown pack → `null`, never default `1`.
 5. **When eBay pack > 1, AE must declare a matching pack.** Missing pack → hard reject (`pack_quantity_missing`). Explicit mismatch → hard reject.
-6. **AE landed cost must be below eBay price** before attaching a source. Also enforce minimum net margin. Apply even for `NEEDS_MANUAL_VALIDATION` paths.
+6. **AE landed cost must be at or below the maximum acceptable supplier cost** (fees, allowance, and minimum profit), and net margin must clear the configured floor. Missing shipping stays unknown. A text-similar source that fails that cap is a failure.
 7. **Visual is evidence, not a kill-switch for runtime failure.** `requireVisual` only when at least one comparison returned `available: true`.
 8. **Statuses must be truthful.** Blocking reasons (`SOURCE_PRICE_NOT_BELOW_EBAY`, `MARGIN_TOO_LOW`, pack/visual/confidence failures) must not surface as successful `AE_MATCHED`.
 9. **Every user-reported miss becomes a regression test** with the real title pair (and query assertion when retrieval was the bug).

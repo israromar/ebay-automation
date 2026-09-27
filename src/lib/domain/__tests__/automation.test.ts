@@ -54,6 +54,32 @@ describe("automation decision synthesis", () => {
       }).outcome,
     ).toBe("READY_FOR_APPROVAL");
   });
+
+  it("keeps investigate products out of approval and rejects weak scores", () => {
+    expect(
+      classifyAutomationDecision({
+        status: "NEEDS_MANUAL_VALIDATION",
+        classification: "investigate",
+        aliexpressProductId: "ae-1",
+        matchConfidence: 90,
+        aliexpressShippingMinor: 100,
+        demandVerified: true,
+        minimumMatchConfidence: 70,
+      }).outcome,
+    ).toBe("NEEDS_EVIDENCE");
+
+    expect(
+      classifyAutomationDecision({
+        status: "NEEDS_MANUAL_VALIDATION",
+        classification: "weak_candidate",
+        aliexpressProductId: "ae-1",
+        matchConfidence: 90,
+        aliexpressShippingMinor: 100,
+        demandVerified: true,
+        minimumMatchConfidence: 70,
+      }).outcome,
+    ).toBe("REJECTED");
+  });
 });
 
 describe("automation config and capabilities", () => {

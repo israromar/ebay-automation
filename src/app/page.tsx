@@ -41,6 +41,8 @@ interface CandidateRow {
   estimatedProfitMinor: number | null;
   netMarginPercent: number | null;
   matchConfidence: number | null;
+  opportunityScore?: number | null;
+  classification?: string | null;
 }
 
 function money(minor: number | null | undefined) {
@@ -217,6 +219,7 @@ export default function OverviewPage() {
                     <TableRow>
                       <TableHead>Product</TableHead>
                       <TableHead>Sold (life / 30d)</TableHead>
+                      <TableHead>Opportunity</TableHead>
                       <TableHead>Match</TableHead>
                       <TableHead>ASP</TableHead>
                       <TableHead>Profit</TableHead>
@@ -244,7 +247,13 @@ export default function OverviewPage() {
                           </Link>
                         </TableCell>
                         <TableCell className="font-mono tabular-nums">{c.soldLast30Days ?? "—"}</TableCell>
-                        <TableCell className="font-mono tabular-nums text-primary">{c.matchConfidence ?? "—"}</TableCell>
+                        <TableCell className="font-mono tabular-nums">
+                          {c.opportunityScore ?? "—"}
+                          {c.classification ? <div className="text-[10px] text-muted-foreground">{c.classification}</div> : null}
+                        </TableCell>
+                        <TableCell className="font-mono tabular-nums text-primary" title="Product sameness only">
+                          {c.matchConfidence ?? "—"}
+                        </TableCell>
                         <TableCell className="font-mono tabular-nums">{money(c.ebayCurrentPriceMinor)}</TableCell>
                         <TableCell
                           className={cn(

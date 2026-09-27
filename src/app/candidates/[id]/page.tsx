@@ -290,6 +290,8 @@ export default function CandidateDetailPage() {
               {[
                 { label: "Price", value: money(candidate.ebayCurrentPriceMinor) },
                 { label: "Sold 30d", value: String(candidate.soldLast30Days ?? "—") },
+                { label: "Opportunity", value: String(candidate.opportunityScore ?? "—") },
+                { label: "Class", value: String(candidate.classification ?? "—") },
                 { label: "Active", value: String(candidate.activeListingCount ?? "—") },
                 { label: "Avg sale", value: money(candidate.avgCompletedSaleMinor) },
               ].map((stat) => (

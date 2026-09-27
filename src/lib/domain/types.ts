@@ -36,6 +36,10 @@ export const REJECTION_CODES = [
   "HIGH_QUALITY_MARGIN_TOO_LOW",
   "HIGH_QUALITY_AE_VOLUME_TOO_LOW",
   "BELOW_HIGH_QUALITY_BAR",
+  "SELL_THROUGH_TOO_LOW",
+  "SUPPLIER_COST_ABOVE_MAX",
+  "ECONOMICS_IMPOSSIBLE",
+  "RESTRICTED_PRODUCT",
 ] as const;
 
 export type RejectionCode = (typeof REJECTION_CODES)[number];
@@ -108,6 +112,12 @@ export interface EbayDemandInput {
 export interface EbayDemandResult {
   available: boolean;
   soldLast30Days?: number;
+  /** Units in the last 7 days when the source actually covers that window. */
+  sold7d?: number | null;
+  /** Units in the last 90 days when the source actually covers that window. */
+  sold90d?: number | null;
+  /** Units in the last 365 days when the source actually covers that window. */
+  sold365d?: number | null;
   avgCompletedSaleMinor?: number;
   medianCompletedSaleMinor?: number;
   totalHistoricalSold?: number;
@@ -125,6 +135,10 @@ export interface QualificationRules {
   minimumOrderCount: number;
   preferredOrderCount: number;
   minimumRecentSales: number;
+  /** soldLast30Days / activeListingCount. Applied only when both inputs exist. */
+  minSellThroughRate: number;
+  /** Absolute profit floor in minor units. Margin percent still applies when this is 0. */
+  minimumProfitMinor: number;
   minimumMatchConfidence: number;
   minimumNetMarginPercent: number;
   preferredNetMarginPercent: number;
@@ -145,7 +159,9 @@ export const DEFAULT_RULES: QualificationRules = {
   preferredReviewCount: 30,
   minimumOrderCount: 50,
   preferredOrderCount: 100,
-  minimumRecentSales: 5,
+  minimumRecentSales: 30,
+  minSellThroughRate: 0.2,
+  minimumProfitMinor: 0,
   minimumMatchConfidence: 70,
   minimumNetMarginPercent: 10,
   preferredNetMarginPercent: 15,

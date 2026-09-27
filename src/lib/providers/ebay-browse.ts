@@ -179,6 +179,9 @@ export class EbayBrowseApiProvider implements EbayProvider {
           return {
             available: true,
             soldLast30Days: history.soldLast30Days,
+            sold7d: history.sold7d,
+            sold90d: history.sold90d,
+            sold365d: history.sold365d,
             avgCompletedSaleMinor: history.avgCompletedSaleMinor ?? undefined,
             medianCompletedSaleMinor: history.medianCompletedSaleMinor ?? undefined,
             source: `purchase_history:${history.source}`,

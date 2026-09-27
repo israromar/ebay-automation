@@ -32,6 +32,8 @@ interface Candidate {
   estimatedProfitMinor: number | null;
   netMarginPercent: number | null;
   matchConfidence: number | null;
+  opportunityScore?: number | null;
+  classification?: string | null;
   lastVerifiedAt: string | null;
   searchKeyword?: string | null;
 }
@@ -146,6 +148,7 @@ export default function CandidatesPage() {
                   <TableHead>Source / adj</TableHead>
                   <TableHead>eBay</TableHead>
                   <TableHead>Sold 30d</TableHead>
+                  <TableHead>Opportunity</TableHead>
                   <TableHead>Profit</TableHead>
                   <TableHead>Match</TableHead>
                   <TableHead className="w-12" />
@@ -183,6 +186,10 @@ export default function CandidatesPage() {
                     </TableCell>
                     <TableCell className="font-mono text-xs tabular-nums">{money(c.ebayCurrentPriceMinor)}</TableCell>
                     <TableCell className="font-mono text-xs tabular-nums">{c.soldLast30Days ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs tabular-nums">
+                      {c.opportunityScore ?? "—"}
+                      {c.classification ? <div className="text-[10px] text-muted-foreground">{c.classification}</div> : null}
+                    </TableCell>
                     <TableCell
                       className={cn(
                         "font-mono text-xs tabular-nums",
@@ -192,7 +199,9 @@ export default function CandidatesPage() {
                       {money(c.estimatedProfitMinor)}
                       {c.netMarginPercent != null ? ` · ${c.netMarginPercent.toFixed(0)}%` : ""}
                     </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums text-primary">{c.matchConfidence ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs tabular-nums text-primary" title="Product sameness only">
+                      {c.matchConfidence ?? "—"}
+                    </TableCell>
                     <TableCell>
                       <Link href={`/candidates/${c.id}`} title="Review match">
                         <Button type="button" variant="ghost" size="icon-sm">

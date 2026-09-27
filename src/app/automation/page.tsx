@@ -32,6 +32,8 @@ type Candidate = {
   aliexpressPriceMinor?: number | null;
   aliexpressShippingMinor?: number | null;
   matchConfidence?: number | null;
+  opportunityScore?: number | null;
+  classification?: string | null;
   rating?: number | null;
   orderCount?: number | null;
   netMarginPercent?: number | null;
@@ -461,7 +463,9 @@ export default function AutomationPage() {
                                 <span className="font-medium">{candidate.productName}</span>
                               </label>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                {item.decision.outcome} · match {candidate.matchConfidence ?? "—"} · AE{" "}
+                                {item.decision.outcome}
+                                {candidate.classification ? ` · ${candidate.classification}` : ""} · opportunity{" "}
+                                {candidate.opportunityScore ?? "—"} · match {candidate.matchConfidence ?? "—"} · AE{" "}
                                 {money(candidate.aliexpressPriceMinor)} · ship{" "}
                                 {typeof candidate.aliexpressShippingMinor === "number"
                                   ? money(candidate.aliexpressShippingMinor)

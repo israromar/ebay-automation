@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/db";
-import { calculateProfit, formatMinor } from "@/lib/domain/profit";
+import { calculateMaxAcceptableSupplierCost, calculateProfit, formatMinor } from "@/lib/domain/profit";
+import {
+  candidateStatusFromSnapshot,
+  finalizeProductIntelligence,
+  qualifyEbaySide,
+  type ProductResearchSnapshot,
+  type SupplierQualificationInput,
+} from "@/lib/domain/product-intelligence";
 import {
   buildAliExpressSearchQueries,
   candidateFingerprint,
@@ -239,15 +246,25 @@ export class ScanOrchestrator {
         };
         const candidate = await this.processEbaySeededProduct(scan.id, idea.searchKeyword ?? idea.title.slice(0, 80), listing, {
           activeListingCount: idea.activeListingCount,
+          priceMinMinor: idea.priceMinMinor,
+          priceMaxMinor: idea.priceMaxMinor,
+          priceMedianMinor: idea.priceMedianMinor,
+          sellerCount: idea.sellerCount,
+          topSellerListingShare: idea.topSellerListingShare,
         });
 
-        const ideaStatus = deriveTrendIdeaMatchStatus({
-          aliexpressProductId: candidate.aliexpressProductId,
-          matchConfidence: candidate.matchConfidence,
-          candidateStatus: candidate.status,
-          rejectionReasonsJson: candidate.rejectionReasonsJson,
-          minimumMatchConfidence: this.rules.minimumMatchConfidence,
-        });
+        const ideaStatus =
+          !candidate.aliexpressProductId && candidate.status === "NEEDS_MANUAL_VALIDATION"
+            ? "NEEDS_EVIDENCE"
+            : candidate.classification === "strong_candidate" && candidate.status === "APPROVED"
+              ? "AE_MATCHED"
+              : deriveTrendIdeaMatchStatus({
+                  aliexpressProductId: candidate.aliexpressProductId,
+                  matchConfidence: candidate.matchConfidence,
+                  candidateStatus: candidate.status,
+                  rejectionReasonsJson: candidate.rejectionReasonsJson,
+                  minimumMatchConfidence: this.rules.minimumMatchConfidence,
+                });
 
         await prisma.trendIdea.update({
           where: { id: idea.id },
@@ -255,6 +272,9 @@ export class ScanOrchestrator {
             status: ideaStatus,
             productCandidateId: candidate.id,
             rejectionReasonsJson: candidate.rejectionReasonsJson,
+            opportunityScore: candidate.opportunityScore,
+            classification: candidate.classification,
+            researchSnapshotJson: candidate.researchSnapshotJson,
             ...(typeof candidate.soldLast30Days === "number" ? { soldLast30Days: candidate.soldLast30Days } : {}),
           },
         });
@@ -336,7 +356,23 @@ export class ScanOrchestrator {
           },
         );
         if (!match.hardReject && match.confidence >= this.rules.minimumMatchConfidence) {
+          const maxSupplierCost = calculateMaxAcceptableSupplierCost({
+            expectedSellingPriceMinor: listing.priceMinor,
+            additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+            ebayFeeRate: this.rules.ebayFeeRate,
+            promotedListingRate: this.rules.promotedListingRate,
+            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+            otherPercentageCost: this.rules.otherPercentageCost,
+            minimumNetMarginPercent: this.rules.minimumNetMarginPercent,
+            minimumProfitMinor: this.rules.minimumProfitMinor,
+          });
           if (isKnownShippingCost(ae.shippingMinor)) {
+            if (ae.priceMinor + ae.shippingMinor > maxSupplierCost) {
+              foundInsufficientMargin = true;
+              continue;
+            }
             if (!hasSourcingPriceAdvantage(listing.priceMinor, ae.priceMinor, ae.shippingMinor)) {
               foundPriceInversion = true;
               continue;
@@ -357,7 +393,7 @@ export class ScanOrchestrator {
               foundInsufficientMargin = true;
               continue;
             }
-          } else if (!hasItemPriceBelowEbay(listing.priceMinor, ae.priceMinor)) {
+          } else if (ae.priceMinor > maxSupplierCost || !hasItemPriceBelowEbay(listing.priceMinor, ae.priceMinor)) {
             foundPriceInversion = true;
             continue;
           }
@@ -394,12 +430,15 @@ export class ScanOrchestrator {
     let demandVerified = false;
     let soldLast30Days: number | undefined;
     let avgCompleted: number | undefined;
+    let demandSource: string | undefined;
+    let medianCompleted: number | undefined;
 
     if (status === "EBAY_MATCHED" && matchSnapshot) {
       const demand = await this.deps.ebay.getMarketDemand({
         keyword: ae.title,
         itemId: matchSnapshot.itemId,
       });
+      demandSource = demand.source;
       if (!demand.available) {
         status = "NEEDS_MANUAL_VALIDATION";
         rejectionCodes.push(demand.reasonCode ?? "EBAY_SOLD_HISTORY_UNAVAILABLE");
@@ -407,6 +446,7 @@ export class ScanOrchestrator {
         demandVerified = true;
         soldLast30Days = demand.soldLast30Days;
         avgCompleted = demand.avgCompletedSaleMinor;
+        medianCompleted = demand.medianCompletedSaleMinor;
         if ((soldLast30Days ?? 0) < this.rules.minimumRecentSales) {
           status = "DEMAND_NOT_VERIFIED";
           rejectionCodes.push("EBAY_RECENT_SALES_TOO_LOW");
@@ -468,6 +508,47 @@ export class ScanOrchestrator {
       rejectionCodes.push("MISSING_SHIPPING_COST");
     }
 
+    const intelligence =
+      matchedItemId && expectedPrice > 0
+        ? finalizeProductIntelligence(
+            qualifyEbaySide({
+              ebayItemId: matchedItemId,
+              ebayTitle: matchedTitle ?? ae.title,
+              listingPriceMinor: expectedPrice,
+              medianCompletedSaleMinor: medianCompleted,
+              avgCompletedSaleMinor: avgCompleted,
+              demandAvailable: demandVerified,
+              demandSource,
+              sales: {
+                sold7d: null,
+                sold30d: soldLast30Days ?? null,
+                sold90d: null,
+                sold365d: null,
+              },
+              activeListingCount,
+              rules: this.rules,
+            }),
+            {
+              productId: ae.productId,
+              title: ae.title,
+              rating: ae.rating,
+              reviewCount: ae.reviewCount,
+              orderCount: ae.orderCount,
+              priceMinor: ae.priceMinor,
+              shippingMinor: ae.shippingMinor,
+              matchConfidence: matchedConfidence ?? 0,
+              matchHardReject: false,
+              matchRejectReasons: [],
+            },
+          )
+        : null;
+    if (intelligence) {
+      status = candidateStatusFromSnapshot(intelligence, shippingKnown);
+      for (const code of intelligence.rejectIds) {
+        if (!rejectionCodes.includes(code as RejectionCode)) rejectionCodes.push(code as RejectionCode);
+      }
+    }
+
     const candidate = await prisma.productCandidate.create({
       data: {
         scanId,
@@ -496,6 +577,9 @@ export class ScanOrchestrator {
         returnOnCostPercent: profit?.returnOnCostPercent ?? null,
         rejectionReasonsJson: JSON.stringify(rejectionCodes),
         demandVerified,
+        opportunityScore: intelligence?.opportunityScore ?? null,
+        classification: intelligence?.classification ?? null,
+        researchSnapshotJson: intelligence ? JSON.stringify(intelligence) : null,
         dataSource: ae.meta.source,
         lastVerifiedAt: new Date(),
         aliexpressProducts: {
@@ -580,17 +664,131 @@ export class ScanOrchestrator {
     return candidate;
   }
 
+  private async persistHeldEbayCandidate(input: {
+    scanId: string;
+    keyword: string;
+    ebay: EbayListing;
+    fingerprint: string;
+    snapshot: ProductResearchSnapshot;
+    activeListingCount?: number | null;
+    avgCompletedSaleMinor?: number;
+    medianCompletedSaleMinor?: number;
+  }) {
+    const status = candidateStatusFromSnapshot(input.snapshot, false);
+    const demandVerified =
+      input.snapshot.ebay.sold30d != null && !input.snapshot.rejectIds.includes("EBAY_SOLD_HISTORY_UNAVAILABLE");
+    return prisma.productCandidate.create({
+      data: {
+        scanId: input.scanId,
+        fingerprint: input.fingerprint,
+        status,
+        productName: input.ebay.title,
+        imageUrl: input.ebay.imageUrl,
+        searchKeyword: input.keyword,
+        ebayItemId: input.ebay.itemId,
+        ebayUrl: input.ebay.url,
+        ebayCurrentPriceMinor: input.snapshot.ebay.expectedSellingPrice,
+        avgCompletedSaleMinor: input.avgCompletedSaleMinor,
+        medianCompletedSaleMinor: input.medianCompletedSaleMinor,
+        soldLast30Days: input.snapshot.ebay.sold30d ?? undefined,
+        activeListingCount: input.activeListingCount && input.activeListingCount > 0 ? input.activeListingCount : null,
+        rejectionReasonsJson: JSON.stringify(input.snapshot.rejectIds),
+        demandVerified,
+        opportunityScore: input.snapshot.opportunityScore,
+        classification: input.snapshot.classification,
+        researchSnapshotJson: JSON.stringify(input.snapshot),
+        dataSource: input.ebay.meta.source,
+        lastVerifiedAt: new Date(),
+        ebayListings: {
+          create: {
+            itemId: input.ebay.itemId,
+            title: input.ebay.title,
+            url: input.ebay.url,
+            imageUrl: input.ebay.imageUrl,
+            priceMinor: input.ebay.priceMinor,
+            shippingMinor: input.ebay.shippingMinor,
+            currency: input.ebay.currency,
+            condition: input.ebay.condition,
+            sellerUsername: input.ebay.sellerUsername,
+            sellerLocation: input.ebay.sellerLocation,
+            categoryId: input.ebay.categoryId,
+            rawJson: JSON.stringify(input.ebay),
+          },
+        },
+        rejectionReasons: {
+          create: input.snapshot.rejectIds.map((code) => ({ code })),
+        },
+      },
+    });
+  }
+
   /**
-   * eBay-first path: seed listing → find AliExpress source → qualify → profit → persist.
+   * eBay-first path: qualify demand and economics, then find an AliExpress source.
    */
-  private async processEbaySeededProduct(scanId: string, keyword: string, ebay: EbayListing, opts?: { activeListingCount?: number }) {
+  private async processEbaySeededProduct(
+    scanId: string,
+    keyword: string,
+    ebay: EbayListing,
+    opts?: {
+      activeListingCount?: number | null;
+      priceMinMinor?: number | null;
+      priceMaxMinor?: number | null;
+      priceMedianMinor?: number | null;
+      sellerCount?: number | null;
+      topSellerListingShare?: number | null;
+    },
+  ) {
     const fingerprint = candidateFingerprint({
       ebayItemId: ebay.itemId,
       title: ebay.title,
     });
 
+    const demand = await this.deps.ebay.getMarketDemand({
+      keyword: ebay.title,
+      itemId: ebay.itemId,
+    });
+    const gate = qualifyEbaySide({
+      ebayItemId: ebay.itemId,
+      ebayTitle: ebay.title,
+      categoryId: ebay.categoryId,
+      listingPriceMinor: ebay.priceMinor,
+      priceMinMinor: opts?.priceMinMinor,
+      priceMaxMinor: opts?.priceMaxMinor,
+      priceMedianMinor: opts?.priceMedianMinor,
+      medianCompletedSaleMinor: demand.medianCompletedSaleMinor,
+      avgCompletedSaleMinor: demand.avgCompletedSaleMinor,
+      demandAvailable: demand.available,
+      demandSource: demand.source,
+      sales: {
+        sold7d: demand.sold7d ?? null,
+        sold30d: demand.soldLast30Days ?? null,
+        sold90d: demand.sold90d ?? null,
+        sold365d: demand.sold365d ?? null,
+      },
+      activeListingCount: opts?.activeListingCount,
+      sellerCount: opts?.sellerCount,
+      topSellerListingShare: opts?.topSellerListingShare,
+      rules: this.rules,
+    });
+
+    if (!gate.proceed) {
+      return this.persistHeldEbayCandidate({
+        scanId,
+        keyword,
+        ebay,
+        fingerprint,
+        snapshot: gate.snapshot,
+        activeListingCount: opts?.activeListingCount,
+        avgCompletedSaleMinor: demand.avgCompletedSaleMinor,
+        medianCompletedSaleMinor: demand.medianCompletedSaleMinor,
+      });
+    }
+
+    const expectedPrice = gate.expectedSellingPriceMinor;
+    const maxSupplierCost = gate.maxAcceptableSupplierCostMinor;
+
     let status: CandidateStatus = "COLLECTING";
-    const rejectionCodes: RejectionCode[] = [];
+    const rejectionCodes: string[] = [];
 
     const sourceSearch = await this.searchAliExpressSources(ebay.title, keyword, ebay.imageUrl);
     const aeQuery = sourceSearch.primaryQuery;
@@ -603,7 +801,7 @@ export class ScanOrchestrator {
         packQuantity: null,
         condition: ebay.condition ?? "NEW",
         categoryId: ebay.categoryId,
-        priceMinor: ebay.priceMinor,
+        priceMinor: expectedPrice,
       },
       candidates: aeResults,
       searchKeyword: aeQuery,
@@ -612,9 +810,9 @@ export class ScanOrchestrator {
 
     const priceEligibleSources = rankedText.filter(({ product }) => {
       if (!isKnownShippingCost(product.shippingMinor)) {
-        return hasItemPriceBelowEbay(ebay.priceMinor, product.priceMinor);
+        return product.priceMinor <= maxSupplierCost;
       }
-      return hasSourcingPriceAdvantage(ebay.priceMinor, product.priceMinor, product.shippingMinor);
+      return product.priceMinor + product.shippingMinor <= maxSupplierCost;
     });
     const profitableSources = priceEligibleSources.filter(({ product }) => {
       if (!isKnownShippingCost(product.shippingMinor)) return true;
@@ -622,7 +820,7 @@ export class ScanOrchestrator {
         aliexpressItemPriceMinor: product.priceMinor,
         aliexpressShippingCostMinor: product.shippingMinor,
         additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
-        expectedSellingPriceMinor: ebay.priceMinor,
+        expectedSellingPriceMinor: expectedPrice,
         ebayFeeRate: this.rules.ebayFeeRate,
         promotedListingRate: this.rules.promotedListingRate,
         expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
@@ -677,81 +875,70 @@ export class ScanOrchestrator {
     const selectedSource = rankedSources[0];
     const selectedAe = selectedSource?.product;
     const topConfidence = selectedSource?.combinedConfidence ?? selectedSource?.match.confidence ?? 0;
-
-    if (!selectedSource) {
-      if (rankedText.length > 0 && priceEligibleSources.length === 0) {
-        status = "UNPROFITABLE";
-        rejectionCodes.push("SOURCE_PRICE_NOT_BELOW_EBAY");
-      } else if (priceEligibleSources.length > 0 && profitableSources.length === 0) {
-        status = "UNPROFITABLE";
-        rejectionCodes.push("MARGIN_TOO_LOW");
-      } else {
-        status = "NEEDS_MANUAL_VALIDATION";
-      }
-      if (status === "NEEDS_MANUAL_VALIDATION" && !visualAttempted) {
-        rejectionCodes.push("NO_QUALIFIED_ALIEXPRESS_SOURCE");
-      } else if (status === "NEEDS_MANUAL_VALIDATION" && visualAvailableCount === 0) {
-        rejectionCodes.push("VISUAL_MATCH_UNAVAILABLE");
-      } else if (status === "NEEDS_MANUAL_VALIDATION") {
-        rejectionCodes.push("VISUAL_MATCH_TOO_LOW");
-      }
-    } else if (topConfidence < this.rules.minimumMatchConfidence) {
-      status = "NEEDS_MANUAL_VALIDATION";
-      rejectionCodes.push("MATCH_CONFIDENCE_TOO_LOW");
-    } else if (selectedSource.visualAvailable && (selectedSource.visualScore ?? 0) < DEFAULT_VISUAL_MATCH_FLOOR) {
-      status = "NEEDS_MANUAL_VALIDATION";
-      rejectionCodes.push("VISUAL_MATCH_TOO_LOW");
-    }
-
-    if (selectedAe) {
-      const qual = qualifyAliExpressProduct(selectedAe, this.rules);
-      if (qual.reasons.length > 0) {
-        status = "ALIEXPRESS_REJECTED";
-        rejectionCodes.push(...qual.reasons);
-      } else if (status !== "NEEDS_MANUAL_VALIDATION") {
-        if (qual.missingFields.length > 0) {
-          status = "NEEDS_MANUAL_VALIDATION";
-        } else {
-          status = "EBAY_MATCHED";
-        }
-      }
-    }
-
-    let demandVerified = false;
-    let soldLast30Days: number | undefined;
-    let avgCompleted: number | undefined;
-
-    if (status === "EBAY_MATCHED" || (selectedAe && status === "NEEDS_MANUAL_VALIDATION")) {
-      const demand = await this.deps.ebay.getMarketDemand({
-        keyword: ebay.title,
-        itemId: ebay.itemId,
-      });
-      if (!demand.available) {
-        if (status === "EBAY_MATCHED") status = "NEEDS_MANUAL_VALIDATION";
-        rejectionCodes.push(demand.reasonCode ?? "EBAY_SOLD_HISTORY_UNAVAILABLE");
-      } else {
-        demandVerified = true;
-        soldLast30Days = demand.soldLast30Days;
-        avgCompleted = demand.avgCompletedSaleMinor;
-        if ((soldLast30Days ?? 0) < this.rules.minimumRecentSales) {
-          status = "DEMAND_NOT_VERIFIED";
-          rejectionCodes.push("EBAY_RECENT_SALES_TOO_LOW");
-        }
-      }
-    }
-
     const shipping = selectedAe?.shippingMinor;
     const shippingKnown = isKnownShippingCost(shipping);
-    if (selectedAe && !shippingKnown && status !== "ALIEXPRESS_REJECTED") {
-      rejectionCodes.push("MISSING_SHIPPING_COST");
-      if (status === "EBAY_MATCHED") {
-        status = "NEEDS_MANUAL_VALIDATION";
-      }
+
+    const supplierInput: SupplierQualificationInput | null = selectedAe
+      ? {
+          productId: selectedAe.productId,
+          title: selectedAe.title,
+          rating: selectedAe.rating,
+          reviewCount: selectedAe.reviewCount,
+          orderCount: selectedAe.orderCount,
+          priceMinor: selectedAe.priceMinor,
+          shippingMinor: selectedAe.shippingMinor,
+          matchConfidence: topConfidence,
+          matchHardReject: Boolean(selectedSource?.match.hardReject),
+          matchRejectReasons: selectedSource?.match.hardReject ? selectedSource.match.reasons : [],
+        }
+      : null;
+
+    let snapshot = finalizeProductIntelligence(gate, supplierInput);
+    if (!selectedSource && rankedText.length > 0 && priceEligibleSources.length === 0) {
+      snapshot = {
+        ...snapshot,
+        status: "rejected",
+        classification: "reject",
+        opportunityScore: null,
+        rejectIds: ["SUPPLIER_COST_ABOVE_MAX"],
+        rejectReasons: ["Every retrieved AliExpress price is above the maximum acceptable supplier cost."],
+      };
+    } else if (!selectedSource && priceEligibleSources.length > 0 && profitableSources.length === 0) {
+      snapshot = {
+        ...snapshot,
+        status: "rejected",
+        classification: "reject",
+        opportunityScore: null,
+        rejectIds: ["MARGIN_TOO_LOW"],
+        rejectReasons: ["Retrieved sources do not clear the minimum net margin."],
+      };
+    } else if (selectedSource?.visualAvailable && (selectedSource.visualScore ?? 0) < DEFAULT_VISUAL_MATCH_FLOOR) {
+      snapshot = {
+        ...snapshot,
+        status: "rejected",
+        classification: "reject",
+        opportunityScore: null,
+        rejectIds: ["VISUAL_MATCH_TOO_LOW"],
+        rejectReasons: ["Visual similarity is below the floor."],
+      };
+    } else if (selectedSource && visualAttempted && visualAvailableCount === 0 && snapshot.status === "qualified") {
+      snapshot = {
+        ...snapshot,
+        warnings: [...snapshot.warnings, "VISUAL_MATCH_UNAVAILABLE"],
+      };
     }
 
-    const expectedPrice = ebay.priceMinor;
+    status = candidateStatusFromSnapshot(snapshot, shippingKnown);
+    if (snapshot.warnings.includes("VISUAL_MATCH_UNAVAILABLE") && status === "APPROVED") {
+      status = "NEEDS_MANUAL_VALIDATION";
+    }
+    rejectionCodes.push(...snapshot.rejectIds);
+
+    const demandVerified = snapshot.ebay.sold30d != null && !snapshot.rejectIds.includes("EBAY_SOLD_HISTORY_UNAVAILABLE");
+    const soldLast30Days = snapshot.ebay.sold30d ?? undefined;
+    const avgCompleted = demand.avgCompletedSaleMinor;
     const profit =
-      selectedAe && isKnownShippingCost(shipping)
+      selectedAe && shippingKnown
         ? calculateProfit({
             aliexpressItemPriceMinor: selectedAe.priceMinor,
             aliexpressShippingCostMinor: shipping,
@@ -766,26 +953,8 @@ export class ScanOrchestrator {
           })
         : null;
 
-    if (demandVerified && status !== "DEMAND_NOT_VERIFIED" && status !== "ALIEXPRESS_REJECTED" && status !== "NEEDS_MANUAL_VALIDATION") {
-      if (!profit || profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
-        status = profit ? "UNPROFITABLE" : "NEEDS_MANUAL_VALIDATION";
-        rejectionCodes.push(profit ? "MARGIN_TOO_LOW" : "MISSING_SHIPPING_COST");
-      } else {
-        status = "APPROVED";
-      }
-    }
-
-    if (status === "APPROVED" && !demandVerified) {
-      status = "NEEDS_MANUAL_VALIDATION";
-      rejectionCodes.push("EBAY_SOLD_HISTORY_UNAVAILABLE");
-    }
-    if (status === "APPROVED" && !shippingKnown) {
-      status = "NEEDS_MANUAL_VALIDATION";
-      rejectionCodes.push("MISSING_SHIPPING_COST");
-    }
-
-    const matchConfidence = selectedAe ? topConfidence : undefined;
-    const activeListingCount = opts?.activeListingCount ?? 1;
+    const matchConfidence = snapshot.matchConfidence ?? (selectedAe ? topConfidence : undefined);
+    const activeListingCount = opts?.activeListingCount && opts.activeListingCount > 0 ? opts.activeListingCount : null;
     const alternativeSources = aeResults
       .map((product) => {
         const match = scoreAliExpressSourceMatch(
@@ -833,14 +1002,18 @@ export class ScanOrchestrator {
         ebayUrl: ebay.url,
         ebayCurrentPriceMinor: expectedPrice,
         avgCompletedSaleMinor: avgCompleted,
+        medianCompletedSaleMinor: demand.medianCompletedSaleMinor,
         soldLast30Days,
         activeListingCount,
         matchConfidence,
-        estimatedProfitMinor: profit?.estimatedProfitMinor ?? null,
-        netMarginPercent: profit?.profitMarginPercent ?? null,
+        estimatedProfitMinor: profit?.estimatedProfitMinor ?? snapshot.economics.estimatedNetProfit,
+        netMarginPercent: profit?.profitMarginPercent ?? snapshot.economics.estimatedMargin,
         returnOnCostPercent: profit?.returnOnCostPercent ?? null,
         rejectionReasonsJson: JSON.stringify(rejectionCodes),
         demandVerified,
+        opportunityScore: snapshot.opportunityScore,
+        classification: snapshot.classification,
+        researchSnapshotJson: JSON.stringify(snapshot),
         dataSource: ebay.meta.source,
         lastVerifiedAt: new Date(),
         ebayListings: {
@@ -1054,6 +1227,229 @@ export class ScanOrchestrator {
     };
   }
 
+  private async resumeSupplierAfterDemand(
+    candidate: {
+      id: string;
+      scanId: string;
+      productName: string;
+      imageUrl: string | null;
+      searchKeyword: string | null;
+      ebayItemId: string | null;
+      ebayUrl: string | null;
+      ebayCurrentPriceMinor: number | null;
+      activeListingCount: number | null;
+    },
+    observation: {
+      soldLast30Days: number;
+      avgCompletedSaleMinor?: number;
+      medianCompletedSaleMinor?: number;
+      notes?: string;
+      verifiedBy?: string;
+    },
+  ) {
+    const priceMinor = candidate.ebayCurrentPriceMinor ?? 0;
+    const ebay: EbayListing = {
+      itemId: candidate.ebayItemId ?? "",
+      title: candidate.productName,
+      url: candidate.ebayUrl ?? "",
+      imageUrl: candidate.imageUrl ?? undefined,
+      priceMinor,
+      currency: "USD",
+      condition: "NEW",
+      meta: {
+        source: "manual_resume",
+        confidence: 1,
+        collectedAt: new Date().toISOString(),
+        completeness: "partial",
+        warnings: [],
+      },
+    };
+    if (!ebay.itemId) {
+      throw new Error("Cannot match supplier: candidate has no eBay item id");
+    }
+
+    const gate = qualifyEbaySide({
+      ebayItemId: ebay.itemId,
+      ebayTitle: ebay.title,
+      listingPriceMinor: priceMinor,
+      medianCompletedSaleMinor: observation.medianCompletedSaleMinor,
+      avgCompletedSaleMinor: observation.avgCompletedSaleMinor,
+      demandAvailable: true,
+      demandSource: "manual",
+      sales: { sold7d: null, sold30d: observation.soldLast30Days, sold90d: null, sold365d: null },
+      activeListingCount: candidate.activeListingCount,
+      rules: this.rules,
+    });
+    if (!gate.proceed) {
+      const status = candidateStatusFromSnapshot(gate.snapshot, false);
+      const updated = await prisma.productCandidate.update({
+        where: { id: candidate.id },
+        data: {
+          status,
+          demandVerified: true,
+          soldLast30Days: observation.soldLast30Days,
+          avgCompletedSaleMinor: observation.avgCompletedSaleMinor,
+          medianCompletedSaleMinor: observation.medianCompletedSaleMinor,
+          ebayCurrentPriceMinor: gate.expectedSellingPriceMinor,
+          opportunityScore: gate.snapshot.opportunityScore,
+          classification: gate.snapshot.classification,
+          researchSnapshotJson: JSON.stringify(gate.snapshot),
+          rejectionReasonsJson: JSON.stringify(gate.snapshot.rejectIds),
+          lastVerifiedAt: new Date(),
+        },
+      });
+      await this.syncIdeaIntelligence(candidate.id, gate.snapshot, status, observation.soldLast30Days);
+      return updated;
+    }
+
+    const sourceSearch = await this.searchAliExpressSources(ebay.title, candidate.searchKeyword ?? ebay.title, ebay.imageUrl);
+    const ranked = rankAliExpressSources({
+      ebay: { title: ebay.title, packQuantity: null, condition: "NEW", priceMinor: gate.expectedSellingPriceMinor },
+      candidates: sourceSearch.products,
+      searchKeyword: sourceSearch.primaryQuery,
+      rules: this.rules,
+    });
+    const affordable = ranked.filter(({ product }) => {
+      if (!isKnownShippingCost(product.shippingMinor)) return product.priceMinor <= gate.maxAcceptableSupplierCostMinor;
+      return product.priceMinor + product.shippingMinor <= gate.maxAcceptableSupplierCostMinor;
+    });
+    let selected = affordable[0];
+    if (this.deps.visualMatch && affordable.length > 0 && ebay.imageUrl) {
+      const visuals = [];
+      for (const entry of affordable.slice(0, 20)) {
+        if (!entry.product.imageUrl) {
+          visuals.push({ productId: entry.product.productId, score: 0, similarity: 0, available: false });
+          continue;
+        }
+        const comparison = await this.deps.visualMatch.compareImages(ebay.imageUrl, entry.product.imageUrl);
+        visuals.push({
+          productId: entry.product.productId,
+          score: comparison.score,
+          similarity: comparison.similarity,
+          available: comparison.available,
+        });
+      }
+      const reranked = applyVisualScoresToRankedSources(affordable.slice(0, 20), visuals, {
+        visualFloor: DEFAULT_VISUAL_MATCH_FLOOR,
+        ebayPriceMinor: gate.expectedSellingPriceMinor,
+        requireVisual: visuals.some((visual) => visual.available),
+      });
+      selected = reranked[0];
+    }
+
+    const selectedAe = selected?.product;
+    const confidence = selected?.combinedConfidence ?? selected?.match.confidence ?? 0;
+    const snapshot = finalizeProductIntelligence(
+      gate,
+      selectedAe
+        ? {
+            productId: selectedAe.productId,
+            title: selectedAe.title,
+            rating: selectedAe.rating,
+            reviewCount: selectedAe.reviewCount,
+            orderCount: selectedAe.orderCount,
+            priceMinor: selectedAe.priceMinor,
+            shippingMinor: selectedAe.shippingMinor,
+            matchConfidence: confidence,
+            matchHardReject: selected.match.hardReject,
+            matchRejectReasons: selected.match.hardReject ? selected.match.reasons : [],
+          }
+        : null,
+    );
+    const shippingCost = selectedAe && isKnownShippingCost(selectedAe.shippingMinor) ? selectedAe.shippingMinor : null;
+    const status = candidateStatusFromSnapshot(snapshot, shippingCost != null);
+    const profit =
+      selectedAe && shippingCost != null
+        ? calculateProfit({
+            aliexpressItemPriceMinor: selectedAe.priceMinor,
+            aliexpressShippingCostMinor: shippingCost,
+            additionalSourcingCostMinor: this.rules.additionalSourcingCostMinor,
+            expectedSellingPriceMinor: gate.expectedSellingPriceMinor,
+            ebayFeeRate: this.rules.ebayFeeRate,
+            promotedListingRate: this.rules.promotedListingRate,
+            expectedReturnCostMinor: this.rules.expectedReturnCostMinor,
+            expectedRefundCostMinor: this.rules.expectedRefundCostMinor,
+            otherFixedCostsMinor: this.rules.otherFixedCostsMinor,
+            otherPercentageCost: this.rules.otherPercentageCost,
+          })
+        : null;
+
+    const updated = await prisma.productCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        status,
+        demandVerified: true,
+        soldLast30Days: observation.soldLast30Days,
+        avgCompletedSaleMinor: observation.avgCompletedSaleMinor,
+        medianCompletedSaleMinor: observation.medianCompletedSaleMinor,
+        ebayCurrentPriceMinor: gate.expectedSellingPriceMinor,
+        aliexpressProductId: selectedAe?.productId,
+        aliexpressUrl: selectedAe?.url,
+        aliexpressPriceMinor: selectedAe?.priceMinor,
+        aliexpressShippingMinor: selectedAe ? (selectedAe.shippingMinor ?? null) : null,
+        rating: selectedAe?.rating,
+        reviewCount: selectedAe?.reviewCount,
+        orderCount: selectedAe?.orderCount,
+        matchConfidence: snapshot.matchConfidence ?? (selectedAe ? confidence : null),
+        adjustedSourceCostMinor: profit?.adjustedSourceCostMinor ?? null,
+        estimatedProfitMinor: profit?.estimatedProfitMinor ?? null,
+        netMarginPercent: profit?.profitMarginPercent ?? null,
+        returnOnCostPercent: profit?.returnOnCostPercent ?? null,
+        opportunityScore: snapshot.opportunityScore,
+        classification: snapshot.classification,
+        researchSnapshotJson: JSON.stringify(snapshot),
+        rejectionReasonsJson: JSON.stringify(snapshot.rejectIds),
+        lastVerifiedAt: new Date(),
+        ...(selectedAe
+          ? {
+              aliexpressProducts: {
+                create: {
+                  productId: selectedAe.productId,
+                  title: selectedAe.title,
+                  url: selectedAe.url,
+                  imageUrl: selectedAe.imageUrl,
+                  priceMinor: selectedAe.priceMinor,
+                  shippingMinor: selectedAe.shippingMinor,
+                  currency: selectedAe.currency,
+                  rating: selectedAe.rating,
+                  reviewCount: selectedAe.reviewCount,
+                  orderCount: selectedAe.orderCount,
+                  rawJson: JSON.stringify(selectedAe),
+                },
+              },
+            }
+          : {}),
+      },
+    });
+    await this.syncIdeaIntelligence(candidate.id, snapshot, status, observation.soldLast30Days);
+    return updated;
+  }
+
+  private async syncIdeaIntelligence(
+    candidateId: string,
+    snapshot: ProductResearchSnapshot,
+    status: CandidateStatus,
+    soldLast30Days: number,
+  ) {
+    const ideaStatus =
+      !snapshot.supplier && status === "NEEDS_MANUAL_VALIDATION"
+        ? "NEEDS_EVIDENCE"
+        : snapshot.classification === "strong_candidate" && status === "APPROVED"
+          ? "AE_MATCHED"
+          : "REJECTED";
+    await prisma.trendIdea.updateMany({
+      where: { productCandidateId: candidateId },
+      data: {
+        status: ideaStatus,
+        soldLast30Days,
+        opportunityScore: snapshot.opportunityScore,
+        classification: snapshot.classification,
+        researchSnapshotJson: JSON.stringify(snapshot),
+        rejectionReasonsJson: JSON.stringify(snapshot.rejectIds),
+      },
+    });
+  }
+
   async applyManualDemand(
     candidateId: string,
     observation: {
@@ -1076,7 +1472,19 @@ export class ScanOrchestrator {
       candidate.aliexpressPriceMinor == null ||
       candidate.matchConfidence == null
     ) {
-      throw new Error("Cannot approve demand: candidate has no validated AliExpress source");
+      await prisma.ebaySaleObservation.create({
+        data: {
+          candidateId,
+          source: "EbayManualDemandProvider",
+          soldLast30Days: observation.soldLast30Days,
+          avgPriceMinor: observation.avgCompletedSaleMinor,
+          medianPriceMinor: observation.medianCompletedSaleMinor,
+          evidenceUrl: observation.evidenceUrl,
+          notes: observation.notes,
+          verifiedBy: observation.verifiedBy ?? "operator",
+        },
+      });
+      return this.resumeSupplierAfterDemand(candidate, observation);
     }
 
     await prisma.ebaySaleObservation.create({
@@ -1110,21 +1518,32 @@ export class ScanOrchestrator {
         })
       : null;
 
-    const rejectionCodes: RejectionCode[] = [];
-    let status: CandidateStatus = "EBAY_MATCHED";
-
-    if (!shippingKnown) {
-      status = "NEEDS_MANUAL_VALIDATION";
-      rejectionCodes.push("MISSING_SHIPPING_COST");
-    } else if (observation.soldLast30Days < this.rules.minimumRecentSales) {
-      status = "DEMAND_NOT_VERIFIED";
-      rejectionCodes.push("EBAY_RECENT_SALES_TOO_LOW");
-    } else if (!profit || profit.profitMarginPercent < this.rules.minimumNetMarginPercent) {
-      status = "UNPROFITABLE";
-      rejectionCodes.push("MARGIN_TOO_LOW");
-    } else {
-      status = "APPROVED";
-    }
+    const gate = qualifyEbaySide({
+      ebayItemId: candidate.ebayItemId ?? candidate.id,
+      ebayTitle: candidate.productName,
+      listingPriceMinor: expectedPrice,
+      medianCompletedSaleMinor: observation.medianCompletedSaleMinor,
+      avgCompletedSaleMinor: observation.avgCompletedSaleMinor,
+      demandAvailable: true,
+      demandSource: "manual",
+      sales: { sold7d: null, sold30d: observation.soldLast30Days, sold90d: null, sold365d: null },
+      activeListingCount: candidate.activeListingCount,
+      rules: this.rules,
+    });
+    const snapshot = finalizeProductIntelligence(gate, {
+      productId: candidate.aliexpressProductId,
+      title: candidate.productName,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+      orderCount: candidate.orderCount,
+      priceMinor: candidate.aliexpressPriceMinor,
+      shippingMinor: candidate.aliexpressShippingMinor,
+      matchConfidence: candidate.matchConfidence ?? 0,
+      matchHardReject: false,
+      matchRejectReasons: [],
+    });
+    const status = candidateStatusFromSnapshot(snapshot, shippingKnown);
+    const rejectionCodes = snapshot.rejectIds;
 
     const updated = await prisma.productCandidate.update({
       where: { id: candidateId },
@@ -1139,6 +1558,9 @@ export class ScanOrchestrator {
         returnOnCostPercent: profit?.returnOnCostPercent ?? null,
         adjustedSourceCostMinor: profit?.adjustedSourceCostMinor ?? null,
         rejectionReasonsJson: JSON.stringify(rejectionCodes),
+        opportunityScore: snapshot.opportunityScore,
+        classification: snapshot.classification,
+        researchSnapshotJson: JSON.stringify(snapshot),
         lastVerifiedAt: new Date(),
         ...(profit
           ? {
@@ -1173,6 +1595,8 @@ export class ScanOrchestrator {
         },
       },
     });
+
+    await this.syncIdeaIntelligence(candidateId, snapshot, status, observation.soldLast30Days);
 
     await prisma.auditLog.create({
       data: {

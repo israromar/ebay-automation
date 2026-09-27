@@ -18,8 +18,8 @@ async function resolveIdeaSoldCount(
   ebay: EbayProvider,
   idea: { ebayItemId: string; title: string; searchKeyword: string },
 ): Promise<{ soldLast30Days: number; soldCountSource: SoldCountSource } | null> {
-  // Browse getItem.estimatedSoldQuantity is the reliable triage signal (Insights is often 403).
-  // Verified last-30-day counts still come from Insights / purchase-history / manual demand.
+  // Browse getItem.estimatedSoldQuantity is a lifetime triage signal, not verified 30-day demand.
+  // Product intelligence ignores soldCountSource "browse_estimate" for the 30-day hard gate.
   void idea.searchKeyword;
   void idea.title;
   try {
@@ -85,6 +85,8 @@ export class TrendResearchService {
               priceMinMinor: idea.priceMinMinor,
               priceMaxMinor: idea.priceMaxMinor,
               priceMedianMinor: idea.priceMedianMinor,
+              sellerCount: idea.sellerCount,
+              topSellerListingShare: idea.topSellerListingShare,
               ...(sold
                 ? {
                     soldLast30Days: sold.soldLast30Days,

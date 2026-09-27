@@ -543,6 +543,7 @@ export class AutonomousResearchOrchestrator {
     for (const candidate of candidates) {
       const classified = classifyAutomationDecision({
         status: candidate.status,
+        classification: candidate.classification,
         aliexpressProductId: candidate.aliexpressProductId,
         matchConfidence: candidate.matchConfidence,
         aliexpressShippingMinor: candidate.aliexpressShippingMinor,
@@ -572,6 +573,8 @@ export class AutonomousResearchOrchestrator {
           evidenceJson: JSON.stringify({
             status: candidate.status,
             matchConfidence: candidate.matchConfidence,
+            classification: candidate.classification,
+            opportunityScore: candidate.opportunityScore,
             aliexpressProductId: candidate.aliexpressProductId,
             aliexpressShippingMinor: candidate.aliexpressShippingMinor,
             demandVerified: candidate.demandVerified,

@@ -115,6 +115,7 @@ export function detectAutomationCapabilities(): AutomationCapabilities {
 /** Classify a matched candidate for the final human gate. */
 export function classifyAutomationDecision(input: {
   status: string;
+  classification?: string | null;
   aliexpressProductId?: string | null;
   matchConfidence?: number | null;
   aliexpressShippingMinor?: number | null;
@@ -132,6 +133,18 @@ export function classifyAutomationDecision(input: {
   highQualityMinOrderCount?: number;
 }): { outcome: AutomationDecisionOutcome; reasons: string[] } {
   const reasons = parseJsonStringArray(input.rejectionReasonsJson);
+  if (input.classification === "reject" || input.classification === "weak_candidate") {
+    return { outcome: "REJECTED", reasons: reasons.length ? reasons : [input.classification] };
+  }
+  if (input.classification === "investigate") {
+    if (["UNPROFITABLE", "DEMAND_NOT_VERIFIED", "ALIEXPRESS_REJECTED"].includes(input.status)) {
+      return { outcome: "REJECTED", reasons: reasons.length ? reasons : [input.status] };
+    }
+    return { outcome: "NEEDS_EVIDENCE", reasons: reasons.length ? reasons : ["INVESTIGATE"] };
+  }
+  if (!input.classification && input.status === "NEEDS_MANUAL_VALIDATION" && !input.aliexpressProductId && reasons.includes("EBAY_SOLD_HISTORY_UNAVAILABLE")) {
+    return { outcome: "NEEDS_EVIDENCE", reasons };
+  }
   if (!input.aliexpressProductId || input.status === "ALIEXPRESS_REJECTED") {
     return { outcome: "REJECTED", reasons: reasons.length ? reasons : ["NO_QUALIFIED_ALIEXPRESS_SOURCE"] };
   }
@@ -170,7 +183,10 @@ export function classifyAutomationDecision(input: {
   if (!input.demandVerified || input.status === "NEEDS_MANUAL_VALIDATION" || reasons.includes("EBAY_SOLD_HISTORY_UNAVAILABLE")) {
     return { outcome: "NEEDS_EVIDENCE", reasons: [...new Set([...reasons, "EBAY_SOLD_HISTORY_UNAVAILABLE"])] };
   }
-  if (input.status === "APPROVED" || input.status === "EBAY_MATCHED") {
+  if (input.status === "APPROVED" || (input.status === "EBAY_MATCHED" && input.classification !== "strong_candidate" && !input.classification)) {
+    return { outcome: "READY_FOR_APPROVAL", reasons };
+  }
+  if (input.classification === "strong_candidate" && (input.status === "APPROVED" || input.status === "EBAY_MATCHED")) {
     return { outcome: "READY_FOR_APPROVAL", reasons };
   }
   return { outcome: "NEEDS_EVIDENCE", reasons: reasons.length ? reasons : ["MANUAL_INTERVENTION_REQUIRED"] };
