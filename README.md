@@ -20,7 +20,7 @@ keywords (typed, or the trending US list)
 
 ### Where "sold in the last 30 days" comes from
 
-eBay has no public API for 30-day sold counts. Marketplace Insights is Limited Release, and since July 2026 sold/completed search results require sign-in. The app therefore uses two sources, and every result carries a badge saying which one it came from.
+eBay has no public API for 30-day sold counts. Marketplace Insights is Limited Release, and since July 2026 sold/completed search results require sign-in. The app therefore uses three sources, and every result carries a badge saying which one it came from.
 
 **1. Hybrid tracker (automatic, official Browse API only).** The tracker records each listing's lifetime `estimatedSoldQuantity` once a day.
 
@@ -31,6 +31,8 @@ eBay has no public API for 30-day sold counts. Marketplace Insights is Limited R
 | **Verified**  | Difference over 30 days of snapshots, **or** the listing is younger than 30 days (lifetime = last 30 days) | Day 30, or immediately for new listings        |
 
 **2. Terapeak import (manual, verified immediately).** In Seller Hub → Research → Product research, open the **Sold** tab. Copy the table (or export it) and paste or upload it on `/import`. Each row is linked to a live eBay listing by item ID or title. The row is marked Verified and then tracked and sourced like any other listing.
+
+**3. Hunter Companion Chrome extension (automatic, exact, verified immediately).** See [below](#hunter-companion-chrome-extension). It reads each listing's `/bin/purchaseHistory` page with your signed-in eBay session and counts every purchase in the last 30 days. Badge: **eBay history**. It takes precedence over the other two sources for 7 days after each check.
 
 A **winner** has Projected or Verified demand at or above the threshold, **and** at least one AliExpress source that passed the gate.
 
@@ -49,6 +51,29 @@ Notes on the numbers:
 
 - The Affiliate API returns `evaluate_rate` as a percentage of positive feedback. It is converted as `% ÷ 20`, so 94% becomes 4.7★.
 - The Affiliate API does not return shipping. The **AE shipping estimate** from Settings is used instead and labelled "est." in the UI.
+
+## Hunter Companion Chrome extension
+
+The extension uses the same mechanisms as two public extensions, rebuilt for this app; none of their code is used.
+
+- **eBay Sold History Button** mechanism: eBay's per-listing purchase-history page (`https://www.ebay.com/bin/purchaseHistory?item=<id>`) lists every recent purchase with date, price and quantity. It only renders for signed-in users, which is why the server can't fetch it.
+- **Skip AliExpress Bundle Deals** mechanism: Bundle Deals / SuperDeals / "Pick 3" pages (`/ssr/…` or `/gcp/…?productIds=<id>:<sku>`) hide or inflate the single-item price, so they are redirected to `https://www.aliexpress.com/item/<id>.html`.
+
+**What it does:**
+
+- **Background verification.** Every minute, while Chrome is open, it leases a few listings from the app's queue (`GET /api/extension/queue`). The queue holds listings near or above your sold threshold that haven't been checked in 3 days. For each one it opens the purchase-history page with your eBay cookies and posts the HTML to `POST /api/extension/purchase-history`.
+- **Parsing on the server.** The app parses the page (`src/lib/domain/ebay-purchase-history.ts`), so a change in eBay's markup is fixed by redeploying the app, not by updating the extension. The listing becomes **VERIFIED** with the exact count. A new winner without sources is sourced on AliExpress immediately.
+- **Pacing and pausing.** It checks one listing every 4 to 7 seconds, with a daily cap (300 by default; `EXTENSION_DAILY_CAP` on the server, and a setting in the extension). On any eBay sign-in page or bot check it **pauses for 6 hours**, shows a red `!` badge and waits for you to press Resume. It never tries to get around either.
+- **eBay item pages.** A panel shows the exact sold/30d, the best AliExpress source and its profit, with **Verify now** and **Track in Hunter** buttons.
+- **AliExpress bundle pages.** They are redirected to the single-item page (a declarativeNetRequest rule), and bundle links in search results are rewritten. The server applies the same rule to every stored source (`src/lib/domain/aliexpress-url.ts`), and the affiliate link is kept separately.
+
+**Install (load unpacked):** Settings → **Hunter Companion** → download the zip, unzip it, open `chrome://extensions`, turn on Developer mode, click **Load unpacked** and pick the folder. Then create a token on the same card and paste it in the extension's Options. Stay signed in to eBay in that Chrome profile.
+
+**Security:** the token is a per-workspace bearer credential. Only its SHA-256 is stored, and it can be revoked in Settings. Your eBay cookies never leave the browser; only the page HTML for listings the app asked about is sent, and it is parsed and discarded.
+
+**Risk:** reading eBay pages automatically, even with your own account and at human pace, is against eBay's user agreement. Keep the daily cap modest.
+
+**Build:** `npm run ext:build` writes `extension/dist` and `public/hunter-companion.zip`. It also runs automatically before `npm run build`. The app URL baked in as the default comes from `HUNTER_APP_URL`, then Vercel's production URL, then `http://localhost:3000`; the Options page can change it.
 
 ## Stack
 
@@ -83,6 +108,7 @@ There is **no fixture or sample data**. Without API keys, hunts stop with a clea
 | `npm run lint` / `typecheck`      | ESLint / `tsc --noEmit`                                                   |
 | `npm run snapshot`                | Daily sold-snapshot tracker (same code as the Vercel cron)                |
 | `npm run db:migrate`              | `prisma migrate deploy`                                                   |
+| `npm run ext:build`               | Build the Chrome extension and `public/hunter-companion.zip`              |
 
 ## Layout
 
@@ -96,6 +122,9 @@ src/lib/api-handlers/      hunts, listings, export, terapeak import, settings, c
 src/lib/services/          hunt.ts (bounded steps), tracker.ts (cron), sourcing.ts, tracking.ts
 src/lib/domain/            demand.ts, sourcing.ts, terapeak-import.ts, matching.ts, profit.ts (pure, unit-tested)
 src/lib/providers/         ebay-browse.ts, aliexpress-official.ts
+extension/src/             Chrome extension: background.ts (queue), content-ebay.ts, content-aliexpress.ts, popup, options
+extension/static/          manifest assets, rules.json (bundle-deal redirect), popup/options HTML
+scripts/build-extension.ts esbuild bundle + manifest + icons + zip
 ```
 
 ## Deploy
