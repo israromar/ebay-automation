@@ -26,7 +26,12 @@ const TIER: Record<DemandTier, { label: string; className: string; icon: typeof 
 export function TierBadge({ tier, source, className }: { tier: DemandTier; source?: string; className?: string }) {
   const t = TIER[tier] ?? TIER.ESTIMATED;
   const Icon = t.icon;
-  const hint = source === "terapeak" ? "Imported from Terapeak (Seller Hub sold data)" : t.hint;
+  const hint =
+    source === "terapeak"
+      ? "Imported from Terapeak (Seller Hub sold data)"
+      : source === "purchase_history"
+        ? "Exact count from the listing's eBay purchase history (Hunter Companion extension)"
+        : t.hint;
   return (
     <span
       title={hint}
@@ -37,12 +42,14 @@ export function TierBadge({ tier, source, className }: { tier: DemandTier; sourc
       )}
     >
       <Icon className="size-3" aria-hidden />
-      {source === "terapeak" ? "Terapeak" : t.label}
+      {source === "terapeak" ? "Terapeak" : source === "purchase_history" ? "eBay history" : t.label}
     </span>
   );
 }
 
 export function tierExplanation(tier: DemandTier, basis?: string) {
+  if (basis === "purchase_history")
+    return "Exact: every purchase in the last 30 days from the listing's eBay purchase history, read by the Hunter Companion extension.";
   if (basis === "terapeak") return "Imported from Terapeak (Seller Hub sold data), scaled to 30 days.";
   if (basis === "young_listing") return "Listing is younger than 30 days, so every lifetime sale happened in the last 30 days.";
   if (basis === "snapshot_30d") return "Difference between daily snapshots 30 days apart.";

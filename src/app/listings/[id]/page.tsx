@@ -19,6 +19,7 @@ interface Detail {
   };
   demand: { sold30d: number | null; tier: DemandTier; basis: string; windowDays: number };
   winner: boolean;
+  purchaseHistoryUrl: string | null;
   settings: { minSold30d: number; minAeRating: number; minMatchConfidence: number; minMarginPct: number; ebayFeeRate: number };
 }
 
@@ -104,13 +105,34 @@ export default function ListingPage({ params }: { params: Promise<{ id: string }
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <TierBadge tier={listing.demandTier} source={listing.demandSource} />
-            <p className="text-muted-foreground">
-              {tierExplanation(demand.tier, listing.demandSource === "terapeak" ? "terapeak" : demand.basis)}
-            </p>
+            <p className="text-muted-foreground">{tierExplanation(demand.tier, demand.basis)}</p>
             <p className={cn("text-sm", meetsSold ? "text-emerald-700" : "text-muted-foreground")}>
               {meetsSold ? "Meets" : "Below"} your {settings.minSold30d}/30d threshold
               {meetsSold && listing.demandTier === "ESTIMATED" ? ", pending measurement" : ""}
             </p>
+            {listing.demandSource === "purchase_history" && listing.purchaseHistoryAt ? (
+              <p className="text-xs text-muted-foreground">
+                Checked on eBay purchase history {relativeTime(listing.purchaseHistoryAt)}
+                {listing.avgSoldPriceMinor ? ` · avg sold ${money(listing.avgSoldPriceMinor)}` : ""}
+                {listing.purchaseHistoryStatus === "ok_lower_bound" ? " · eBay's page was full, so this is a minimum" : ""}
+              </p>
+            ) : null}
+            {listing.purchaseHistoryStatus === "login_required" || listing.purchaseHistoryStatus === "blocked" ? (
+              <p className="text-xs text-amber-800">
+                Last purchase-history check hit {listing.purchaseHistoryStatus === "blocked" ? "an eBay bot check" : "an eBay sign-in page"}
+                . The extension retries after you sign in and press Resume.
+              </p>
+            ) : null}
+            {data.purchaseHistoryUrl ? (
+              <a
+                href={data.purchaseHistoryUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                eBay purchase history <ExternalLink className="size-3" />
+              </a>
+            ) : null}
             <dl className="grid grid-cols-2 gap-y-1 border-t border-border pt-3 text-xs">
               <dt className="text-muted-foreground">Lifetime sold</dt>
               <dd className="text-right tabular-nums">{compact(listing.lifetimeSold)}</dd>

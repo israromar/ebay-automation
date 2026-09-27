@@ -34,7 +34,9 @@ export interface ListingRow {
   sold30d: number | null;
   lifetimeSold: number | null;
   demandTier: DemandTier;
-  demandSource: "browse_tracker" | "terapeak";
+  demandSource: "browse_tracker" | "terapeak" | "purchase_history";
+  purchaseHistoryAt?: string | null;
+  purchaseHistoryStatus?: string | null;
   avgSoldPriceMinor: number | null;
   active: boolean;
   endedReason: string | null;

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ExtensionChip } from "@/components/hunt/extension-connect";
 import { compact, fetchJson, money, relativeTime } from "@/components/hunt/format";
 import { HuntProgress, useHuntRunner } from "@/components/hunt/hunt-progress";
 import { Thumb } from "@/components/hunt/thumb";
@@ -185,9 +186,12 @@ export default function HuntPage() {
             AliExpress source rated <strong>{data?.settings.minAeRating ?? 4.7}★ or higher</strong> that still leaves a profit.
           </p>
         </div>
-        <Link href="/import" className="text-sm font-medium text-primary hover:underline">
-          Have Terapeak data? Import it →
-        </Link>
+        <div className="flex flex-col items-end gap-1.5">
+          <ExtensionChip />
+          <Link href="/import" className="text-sm font-medium text-primary hover:underline">
+            Have Terapeak data? Import it →
+          </Link>
+        </div>
       </header>
 
       {missingKeys ? (
@@ -292,6 +296,12 @@ export default function HuntPage() {
                 <p className="flex items-start gap-2">
                   <TierBadge tier="VERIFIED" />{" "}
                   <span className="text-muted-foreground">30 days of snapshots, a listing under 30 days old, or a Terapeak import.</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <TierBadge tier="VERIFIED" source="purchase_history" />{" "}
+                  <span className="text-muted-foreground">
+                    Exact count from the listing&apos;s eBay purchase history, via the Chrome extension.
+                  </span>
                 </p>
               </CardContent>
             </Card>

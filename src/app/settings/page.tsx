@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ExtensionConnectCard } from "@/components/hunt/extension-connect";
 import { fetchJson } from "@/components/hunt/format";
 
 interface Settings {
@@ -168,6 +169,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <ExtensionConnectCard />
 
       {GROUPS.map((g) => (
         <Card key={g.title}>

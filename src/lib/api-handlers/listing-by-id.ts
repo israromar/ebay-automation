@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isNextResponse, requireSessionWorkspace } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { computeDemand, meetsDemand } from "@/lib/domain/demand";
+import { buildEbayPurchaseHistoryUrl } from "@/lib/domain/ebay-purchase-history";
 import { createAliExpressProvider, loadHuntSettings } from "@/lib/services/providers";
 import { sourceListing } from "@/lib/services/sourcing";
 
@@ -25,11 +26,12 @@ export async function GET(_req: Request, ctx?: Ctx) {
   if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 });
   const settings = await loadHuntSettings(session.workspace.id);
   const demand =
-    listing.demandSource === "terapeak"
-      ? { sold30d: listing.sold30d, tier: listing.demandTier, basis: "terapeak", windowDays: 30 }
+    listing.demandSource === "terapeak" || listing.demandSource === "purchase_history"
+      ? { sold30d: listing.sold30d, tier: listing.demandTier, basis: listing.demandSource, windowDays: 30 }
       : computeDemand({ snapshots: listing.snapshots, itemCreationDate: listing.itemCreationDate });
+  const purchaseHistoryUrl = buildEbayPurchaseHistoryUrl(listing.browseItemId ? listing.ebayItemId : null);
   const winner = meetsDemand(listing, settings.minSold30d) && listing.sources.some((s) => s.rating >= settings.minAeRating);
-  return NextResponse.json({ listing, demand, winner, settings });
+  return NextResponse.json({ listing, demand, winner, settings, purchaseHistoryUrl });
 }
 
 /** Re-run AliExpress sourcing for one listing. */
