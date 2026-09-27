@@ -50,6 +50,19 @@ async function resolveHandler(path: string[], method: Method): Promise<Handler |
   }
 
   if (p === "terapeak/import" && method === "POST") return (await import("@/lib/api-handlers/terapeak-import")).POST;
+  if (p === "settings/extension") {
+    const m = await import("@/lib/api-handlers/extension-settings");
+    if (method === "GET") return m.GET as Handler;
+    if (method === "POST") return m.POST;
+  }
+  if (path[0] === "extension") {
+    const m = await import("@/lib/api-handlers/extension");
+    if (p === "extension/status" && method === "GET") return m.STATUS;
+    if (p === "extension/queue" && method === "GET") return m.QUEUE;
+    if (p === "extension/purchase-history" && method === "POST") return m.PURCHASE_HISTORY;
+    if (p === "extension/track" && method === "POST") return m.TRACK;
+    if (p === "extension/listing" && method === "GET") return m.LISTING;
+  }
   if (p === "cron/snapshot" && method === "GET") return (await import("@/lib/api-handlers/cron-snapshot")).GET;
 
   return null;

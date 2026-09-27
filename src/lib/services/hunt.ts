@@ -16,7 +16,7 @@ import {
 import type { AliExpressProvider } from "@/lib/providers/types";
 import { ConfigError, createAliExpressProvider, createEbayProvider, loadHuntSettings, type HuntSettingsValues } from "./providers";
 import { mapWithConcurrency, sourceListing } from "./sourcing";
-import { recordSnapshot } from "./tracking";
+import { keepImportedDemand, recordSnapshot } from "./tracking";
 
 /** Listings sourced per step (each needs several AliExpress calls). */
 const SOURCE_PER_STEP = 6;
@@ -347,8 +347,15 @@ async function importTerapeakRows(ebay: EbayBrowseApiProvider, hunt: HuntRow, ro
     const existing = await prisma.trackedListing.findUnique({
       where: { workspaceId_ebayItemId: { workspaceId: hunt.workspaceId, ebayItemId } },
     });
+    // An exact purchase-history count beats a Terapeak aggregate; keep it while it's fresh.
+    const keepExact = existing != null && keepImportedDemand(existing, "VERIFIED", now);
     const listing = existing
-      ? await prisma.trackedListing.update({ where: { id: existing.id }, data: { ...base, active: Boolean(detail) } })
+      ? await prisma.trackedListing.update({
+          where: { id: existing.id },
+          data: keepExact
+            ? { huntId: hunt.id, sourcedAt: null, sourceError: null, active: Boolean(detail) }
+            : { ...base, active: Boolean(detail) },
+        })
       : await prisma.trackedListing.create({
           data: {
             ...base,
