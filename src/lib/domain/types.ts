@@ -12,6 +12,10 @@ export interface ProductSearchInput {
   limit?: number;
   shipToCountry?: string;
   currency?: string;
+  /** AliExpress sort; default LAST_VOLUME_DESC (best sellers). */
+  sort?: "LAST_VOLUME_DESC" | "SALE_PRICE_ASC";
+  /** Only products at or below this price (minor units of `currency`). */
+  maxPriceMinor?: number;
 }
 
 export interface AliExpressProduct {

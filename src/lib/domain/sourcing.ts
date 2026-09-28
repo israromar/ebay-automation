@@ -8,6 +8,8 @@ export interface SourcingRules {
   minAeOrders: number;
   minMatchConfidence: number;
   minMarginPct: number;
+  /** Minimum net profit per sale, in the same currency as the prices being gated. */
+  minProfitMinor: number;
   ebayFeeRate: number;
   /** Used when the Affiliate API does not return shipping (it usually doesn't). */
   aeShippingEstimateMinor: number;
@@ -20,6 +22,7 @@ export const DEFAULT_SOURCING_RULES: SourcingRules = {
   minAeOrders: 50,
   minMatchConfidence: 70,
   minMarginPct: 10,
+  minProfitMinor: 200,
   ebayFeeRate: 0.1325,
   aeShippingEstimateMinor: 300,
   extraCostMinor: 0,
@@ -35,6 +38,7 @@ export const GATE_REASONS = [
   "price_missing",
   "cost_not_below_ebay",
   "margin_below_min",
+  "profit_below_min",
 ] as const;
 export type GateReason = (typeof GATE_REASONS)[number];
 
@@ -92,7 +96,10 @@ export function gateSource(ebay: EbaySide, product: AliExpressProduct, searchKey
 
   if (product.priceMinor > 0) {
     if (product.priceMinor + shippingMinor >= ebay.priceMinor + (ebay.shippingMinor ?? 0)) reasons.push("cost_not_below_ebay");
-    else if (profit.profitMarginPercent < rules.minMarginPct) reasons.push("margin_below_min");
+    else {
+      if (profit.profitMarginPercent < rules.minMarginPct) reasons.push("margin_below_min");
+      if (profit.estimatedProfitMinor < rules.minProfitMinor) reasons.push("profit_below_min");
+    }
   }
 
   return {

@@ -3,10 +3,12 @@ import { extractEbayItemId, legacyItemId, marketplaceFromUrl, variationIdFromUrl
 import { bestComparison, fingerprintImage, type ImageFingerprint, type VisualComparison } from "@/lib/domain/image-fingerprint";
 import { buildAliExpressSearchQuery, scoreAliExpressSourceMatch } from "@/lib/domain/matching";
 import { combineConfidence, type ConfidenceTier } from "@/lib/domain/source-confidence";
+import { calculateMaxAcceptableSupplierCost } from "@/lib/domain/profit";
 import { gateSource } from "@/lib/domain/sourcing";
 import type { AliExpressProduct } from "@/lib/domain/types";
 import { logInfo, logWarn } from "@/lib/logger";
 import type { EbayListingForSourcing } from "@/lib/providers/ebay-browse";
+import { convertUsdMinor, usdTo } from "./fx";
 import { createAliExpressProvider, createEbayProvider, loadHuntSettings } from "./providers";
 import { mapWithConcurrency, retrieveAliExpressCandidates } from "./sourcing";
 
@@ -18,6 +20,10 @@ import { mapWithConcurrency, retrieveAliExpressCandidates } from "./sourcing";
 
 const TEXT_SHORTLIST = 30;
 const RESULT_LIMIT = 12;
+/** Close matches that miss the profit floor are still shown (so you know the product exists), after the profitable ones. */
+const UNPROFITABLE_LIMIT = 5;
+/** Cheapest-first results are only worth scoring when the title is at least this close. */
+const PRICE_QUERY_MIN_TEXT = 40;
 const EBAY_IMAGES = 4;
 const IMAGE_CONCURRENCY = 8;
 const IMAGE_TIMEOUT_MS = 5000;
@@ -49,6 +55,8 @@ export interface SourceCandidate {
   shippingMinor: number;
   shippingEstimated: boolean;
   meetsGate: boolean;
+  /** Clears the minimum profit per sale (after fees, AE shipping estimate and extra costs). */
+  meetsProfit: boolean;
   gateReasons: string[];
 }
 
@@ -66,6 +74,16 @@ export interface SourceLookupResult {
     aspects: Record<string, string>;
   };
   candidates: SourceCandidate[];
+  /** Profit floor used for this lookup, in the listing's currency (converted from the USD setting). */
+  profit: {
+    minProfitMinor: number;
+    minProfitUsdMinor: number;
+    /** Most the AliExpress item can cost (before shipping) and still clear the floor; ≤ 0 means no price can. */
+    maxSupplierPriceMinor: number;
+    shippingEstimateMinor: number;
+    usdRate: number;
+    rateSource: "live" | "fallback";
+  };
   stats: { retrieved: number; shortlisted: number; fingerprinted: number; imageFailures: number; queries: string[]; durationMs: number };
 }
 
@@ -130,12 +148,41 @@ export async function findAliExpressSources(workspaceId: string, url: string): P
   const listing = await createEbayProvider().getItemForSourcing(legacyItemId(rawId), marketplace.marketplaceId, variationIdFromUrl(url));
   if (!listing) throw new Error("eBay didn't return this listing. It may have ended, or the link is for another eBay site.");
 
+  // Settings are in USD; convert fixed amounts into the listing's currency (a $3 shipping estimate is ~£2.37, not £3).
+  const settings = await loadHuntSettings(workspaceId);
+  const fx = await usdTo(listing.currency);
+  const localRules = {
+    ...settings,
+    minProfitMinor: convertUsdMinor(settings.minProfitMinor, fx),
+    aeShippingEstimateMinor: convertUsdMinor(settings.aeShippingEstimateMinor, fx),
+    extraCostMinor: convertUsdMinor(settings.extraCostMinor, fx),
+  };
+  const maxSupplierPriceMinor =
+    calculateMaxAcceptableSupplierCost({
+      expectedSellingPriceMinor: listing.priceMinor,
+      buyerShippingRevenueMinor: listing.shippingMinor ?? 0,
+      additionalSourcingCostMinor: localRules.extraCostMinor,
+      ebayFeeRate: localRules.ebayFeeRate,
+      promotedListingRate: 0,
+      expectedReturnCostMinor: 0,
+      expectedRefundCostMinor: 0,
+      otherFixedCostsMinor: 0,
+      minimumNetMarginPercent: localRules.minMarginPct,
+      minimumProfitMinor: localRules.minProfitMinor,
+    }) - localRules.aeShippingEstimateMinor;
+
   const keyword = buildAliExpressSearchQuery(listing.title);
   const [retrieval, ebayPrints] = await Promise.all([
     retrieveAliExpressCandidates(
       createAliExpressProvider(),
       { title: listing.title, keyword, imageUrl: listing.images[0] ?? null },
-      { currency: marketplace.currency, shipToCountry: marketplace.country, maxQueries: 3, extraQueries: extraQueries(listing) },
+      {
+        currency: marketplace.currency,
+        shipToCountry: marketplace.country,
+        maxQueries: 3,
+        extraQueries: extraQueries(listing),
+        maxSupplierPriceMinor: maxSupplierPriceMinor > 0 ? maxSupplierPriceMinor : undefined,
+      },
     ),
     Promise.all(listing.images.slice(0, EBAY_IMAGES).map(fingerprintUrl)),
   ]);
@@ -148,7 +195,16 @@ export async function findAliExpressSources(workspaceId: string, url: string): P
     byImage: product.meta.warnings.includes("retrieved_by_image"),
   }));
   scored.sort((a, b) => Number(a.text.hardReject) - Number(b.text.hardReject) || b.text.confidence - a.text.confidence);
-  const shortlist = [...scored.slice(0, TEXT_SHORTLIST), ...scored.slice(TEXT_SHORTLIST).filter((s) => s.byImage)];
+  const shortlist = [
+    ...scored.slice(0, TEXT_SHORTLIST),
+    ...scored
+      .slice(TEXT_SHORTLIST)
+      .filter(
+        (s) =>
+          s.byImage ||
+          (s.product.meta.warnings.includes("retrieved_by_price") && !s.text.hardReject && s.text.confidence >= PRICE_QUERY_MIN_TEXT),
+      ),
+  ];
 
   let fingerprinted = 0;
   let imageFailures = 0;
@@ -168,7 +224,6 @@ export async function findAliExpressSources(workspaceId: string, url: string): P
     deadline,
   );
 
-  const settings = await loadHuntSettings(workspaceId);
   const candidates: SourceCandidate[] = shortlist.map((s, i) => {
     const visualResult = visuals[i];
     const visual = visualResult?.status === "fulfilled" ? visualResult.value : null;
@@ -179,11 +234,20 @@ export async function findAliExpressSources(workspaceId: string, url: string): P
       { title: listing.title, priceMinor: listing.priceMinor, shippingMinor: listing.shippingMinor ?? 0 },
       s.product,
       keyword,
-      settings,
+      localRules,
     );
     return toCandidate(s.product, marketplace.currency, combined, s.text, visual, s.byImage, gated);
   });
-  candidates.sort((a, b) => b.confidence - a.confidence || b.textScore - a.textScore || (b.orderCount ?? 0) - (a.orderCount ?? 0));
+  // Profitable sources first, then by confidence; the best match is the most confident one that clears the profit floor.
+  candidates.sort(
+    (a, b) =>
+      Number(b.meetsProfit) - Number(a.meetsProfit) ||
+      b.confidence - a.confidence ||
+      b.textScore - a.textScore ||
+      b.estimatedProfitMinor - a.estimatedProfitMinor,
+  );
+  const profitable = candidates.filter((c) => c.meetsProfit).slice(0, RESULT_LIMIT);
+  const unprofitable = candidates.filter((c) => !c.meetsProfit).slice(0, profitable.length ? UNPROFITABLE_LIMIT : RESULT_LIMIT);
 
   const result: SourceLookupResult = {
     ebay: {
@@ -198,7 +262,15 @@ export async function findAliExpressSources(workspaceId: string, url: string): P
       brand: listing.brand,
       aspects: listing.aspects,
     },
-    candidates: candidates.slice(0, RESULT_LIMIT),
+    candidates: [...profitable, ...unprofitable],
+    profit: {
+      minProfitMinor: localRules.minProfitMinor,
+      minProfitUsdMinor: settings.minProfitMinor,
+      maxSupplierPriceMinor,
+      shippingEstimateMinor: localRules.aeShippingEstimateMinor,
+      usdRate: fx.rate,
+      rateSource: fx.source,
+    },
     stats: {
       retrieved: retrieval.products.length,
       shortlisted: shortlist.length,
@@ -244,6 +316,7 @@ function toCandidate(
     shippingMinor: gated.shippingMinor,
     shippingEstimated: gated.shippingEstimated,
     meetsGate: gated.passed,
+    meetsProfit: !gated.reasons.some((r) => r === "profit_below_min" || r === "cost_not_below_ebay" || r === "price_missing"),
     gateReasons: gated.reasons,
   };
 }

@@ -64,6 +64,12 @@ Paste any eBay listing link (built for **ebay.co.uk**; .com, .de, .fr, .it, .es,
 4. **Compare photos.** The top 30 get an **image fingerprint** comparison (`src/lib/domain/image-fingerprint.ts`: background trimmed, dHash with mirror, colour histogram, edge/shape histogram). It's free, with no AI model or API key. It's very strong when both listings reuse the same factory photo (common in dropshipping) and weaker for lifestyle shots from other angles, so the image score is shown separately from the title score.
 5. **Combine** (`src/lib/domain/source-confidence.ts`): 55% title + 45% image, with boosts for the same photo and the same pack size. Accessories and wrong pack sizes are capped at 25. A missing image means 90% of the title score. Tiers: **High ≥ 75**, **Medium 50–74**, **Low < 50**.
 
+**Minimum profit per sale** (Settings, default **$2**) applies to both the Source finder and the hunter's sourcing rules.
+
+- **Currency.** Fixed-money settings (minimum profit, AliExpress shipping estimate, other costs) are converted from USD into the listing's currency using daily ECB rates from Frankfurter, with built-in fallback rates if it's unreachable. So on ebay.co.uk, $2 ≈ £1.58 and the $3 shipping estimate ≈ £2.37.
+- **Cheaper sellers.** The Source finder works out the most you can pay the supplier and still keep the minimum profit. It then runs an extra cheapest-first AliExpress search capped at that price, to find cheaper sellers of the same item.
+- **Ranking.** Sources that clear the minimum are ranked first. The best match is the most confident profitable one. Close matches that miss it are listed under **Below $2 profit**, and if none clears it the page says so and shows the maximum supplier price.
+
 **What each candidate shows:** rating, orders, landed cost, estimated profit and margin in the listing's currency, whether it passes your sourcing rules, and reason chips ("Same photo", "Different colour", "Accessory, not the product", and so on).
 
 **Saving and sharing:** every lookup is saved (History), can be re-run, and exports to CSV. The Chrome extension adds a **Find AliExpress source** button on eBay item pages across these sites.

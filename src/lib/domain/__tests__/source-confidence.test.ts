@@ -22,7 +22,12 @@ describe("combineConfidence", () => {
   });
 
   it("caps hard rejects (accessory, wrong pack) at 25 but still scores them", () => {
-    const r = combineConfidence({ text: text(0, true, ["accessory_vs_main"]), visual: 95, ebayTitle: "Earbuds", aeTitle: "Case for earbuds" });
+    const r = combineConfidence({
+      text: text(0, true, ["accessory_vs_main"]),
+      visual: 95,
+      ebayTitle: "Earbuds",
+      aeTitle: "Case for earbuds",
+    });
     expect(r.confidence).toBeLessThanOrEqual(25);
     expect(r.tier).toBe("LOW");
   });

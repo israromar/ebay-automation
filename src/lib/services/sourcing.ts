@@ -14,7 +14,14 @@ const MAX_QUERIES = 2;
 export async function retrieveAliExpressCandidates(
   ae: AliExpressProvider,
   input: { title: string; keyword: string; imageUrl?: string | null },
-  options?: { currency?: string; shipToCountry?: string; maxQueries?: number; extraQueries?: string[] },
+  options?: {
+    currency?: string;
+    shipToCountry?: string;
+    maxQueries?: number;
+    extraQueries?: string[];
+    /** Also search the main query cheapest-first, capped at this supplier price (finds cheaper sellers of the same item). */
+    maxSupplierPriceMinor?: number;
+  },
 ): Promise<{ products: AliExpressProduct[]; queries: string[]; errors: string[] }> {
   const currency = options?.currency ?? "USD";
   const shipToCountry = options?.shipToCountry ?? "US";
@@ -37,6 +44,18 @@ export async function retrieveAliExpressCandidates(
     calls.push(ae.searchProductsByImage({ imageUrl: input.imageUrl, limit: 50, shipToCountry, currency }));
   }
 
+  if (options?.maxSupplierPriceMinor != null && options.maxSupplierPriceMinor > 0 && queries[0]) {
+    calls.push(
+      ae.searchProducts({
+        keyword: queries[0],
+        limit: 50,
+        shipToCountry,
+        currency,
+        sort: "SALE_PRICE_ASC",
+        maxPriceMinor: options.maxSupplierPriceMinor,
+      }),
+    );
+  }
   const settled = await Promise.allSettled(calls);
   const products = new Map<string, AliExpressProduct>();
   const errors: string[] = [];

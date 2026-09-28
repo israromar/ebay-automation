@@ -16,6 +16,7 @@ interface Settings {
   minAeOrders: number;
   minMatchConfidence: number;
   minMarginPct: number;
+  minProfitMinor: number;
   ebayFeeRate: number;
   aeShippingEstimateMinor: number;
   extraCostMinor: number;
@@ -66,6 +67,12 @@ const GROUPS: Array<{ title: string; description: string; fields: Field[] }> = [
     title: "Profit",
     description: "Used to compute net profit and margin per source.",
     fields: [
+      {
+        key: "minProfitMinor",
+        label: "Minimum profit per sale ($)",
+        hint: "After eBay fees, AliExpress price, shipping and other costs. Converted to £/€ for other eBay sites.",
+        kind: "money",
+      },
       { key: "minMarginPct", label: "Minimum net margin %", hint: "", kind: "float", step: "0.5" },
       { key: "ebayFeeRate", label: "eBay fee %", hint: "Final value fee + payment processing.", kind: "percent", step: "0.01" },
       {

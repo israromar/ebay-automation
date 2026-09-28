@@ -3,7 +3,11 @@ import { extractEbayItemId, marketplaceFromUrl, variationIdFromUrl } from "@/lib
 
 describe("eBay listing URLs", () => {
   it("maps site hosts to marketplaces", () => {
-    expect(marketplaceFromUrl("https://www.ebay.co.uk/itm/Kettle/256123456789")).toEqual({ marketplaceId: "EBAY_GB", currency: "GBP", country: "GB" });
+    expect(marketplaceFromUrl("https://www.ebay.co.uk/itm/Kettle/256123456789")).toEqual({
+      marketplaceId: "EBAY_GB",
+      currency: "GBP",
+      country: "GB",
+    });
     expect(marketplaceFromUrl("https://m.ebay.co.uk/itm/256123456789")?.marketplaceId).toBe("EBAY_GB");
     expect(marketplaceFromUrl("https://www.ebay.com/itm/256123456789")?.marketplaceId).toBe("EBAY_US");
     expect(marketplaceFromUrl("https://www.ebay.com.au/itm/256123456789")?.currency).toBe("AUD");

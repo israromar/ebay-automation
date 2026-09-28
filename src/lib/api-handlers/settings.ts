@@ -12,6 +12,7 @@ const schema = z
     minAeOrders: z.number().int().min(0),
     minMatchConfidence: z.number().int().min(0).max(100),
     minMarginPct: z.number().min(-100).max(100),
+    minProfitMinor: z.number().int().min(0).max(100_000),
     ebayFeeRate: z.number().min(0).max(0.5),
     aeShippingEstimateMinor: z.number().int().min(0),
     extraCostMinor: z.number().int().min(0),

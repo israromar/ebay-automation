@@ -300,11 +300,17 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
       target_language: "EN",
       ship_to_country: input.shipToCountry ?? "US",
       tracking_id: this.config.trackingId ?? "default",
-      sort: "LAST_VOLUME_DESC",
+      sort: input.sort ?? "LAST_VOLUME_DESC",
+      // Price filters are in cents of target_currency.
+      max_sale_price: input.maxPriceMinor != null && input.maxPriceMinor > 0 ? input.maxPriceMinor : undefined,
       fields:
         "commission_rate,sale_price,lastest_volume,evaluate_rate,evaluation_count,product_title,product_main_image_url,product_id,promotion_link,product_detail_url",
     });
-    return extractProducts(body).map((product) => mapProduct(product, this.name));
+    return extractProducts(body).map((product) => {
+      const mapped = mapProduct(product, this.name);
+      if (input.sort === "SALE_PRICE_ASC") mapped.meta.warnings.push("retrieved_by_price");
+      return mapped;
+    });
   }
 
   async getProductDetails(urlOrId: string): Promise<AliExpressProductDetails> {

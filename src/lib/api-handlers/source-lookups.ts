@@ -104,6 +104,7 @@ export async function EXPORT(_req: Request, ctx?: Ctx) {
       orders: c.orderCount ?? "",
       est_profit: money(c.estimatedProfitMinor),
       margin_pct: c.marginPct,
+      meets_min_profit: c.meetsProfit === false ? "no" : "yes",
       reasons: c.reasons.join(" "),
       ebay_title: result.ebay?.title ?? "",
       ebay_url: result.ebay?.url ?? row.ebayUrl,

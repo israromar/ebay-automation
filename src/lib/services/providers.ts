@@ -67,6 +67,7 @@ export type HuntSettingsValues = {
   minAeOrders: number;
   minMatchConfidence: number;
   minMarginPct: number;
+  minProfitMinor: number;
   ebayFeeRate: number;
   aeShippingEstimateMinor: number;
   extraCostMinor: number;
@@ -94,6 +95,7 @@ export async function loadHuntSettings(workspaceId: string): Promise<HuntSetting
     minAeOrders: row.minAeOrders,
     minMatchConfidence: row.minMatchConfidence,
     minMarginPct: row.minMarginPct,
+    minProfitMinor: row.minProfitMinor,
     ebayFeeRate: row.ebayFeeRate,
     aeShippingEstimateMinor: row.aeShippingEstimateMinor,
     extraCostMinor: row.extraCostMinor,

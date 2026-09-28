@@ -42,6 +42,8 @@ model HuntSettings {
   minAeOrders             Int       @default(50)
   minMatchConfidence      Int       @default(70)
   minMarginPct            Float     @default(10)
+  /// Minimum net profit per sale in USD cents; converted to the listing currency when sourcing.
+  minProfitMinor          Int       @default(200)
   ebayFeeRate             Float     @default(0.1325)
   aeShippingEstimateMinor Int       @default(300)
   extraCostMinor          Int       @default(0)

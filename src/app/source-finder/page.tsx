@@ -33,6 +33,8 @@ interface Candidate {
   shippingMinor: number;
   shippingEstimated: boolean;
   meetsGate: boolean;
+  /** Missing on lookups saved before the profit floor existed. */
+  meetsProfit?: boolean;
 }
 
 interface Lookup {
@@ -63,6 +65,14 @@ interface Lookup {
     };
     candidates: Candidate[];
     stats: { retrieved: number; shortlisted: number; fingerprinted: number; imageFailures: number; durationMs: number };
+    profit?: {
+      minProfitMinor: number;
+      minProfitUsdMinor: number;
+      maxSupplierPriceMinor: number;
+      shippingEstimateMinor: number;
+      usdRate: number;
+      rateSource: "live" | "fallback";
+    };
   } | null;
 }
 
@@ -96,6 +106,7 @@ const REASONS: Record<string, string> = {
   brand_mismatch: "Different brand",
   model_mismatch: "Different model",
   feature_quantity_mismatch: "Different size/count",
+  profit_below_min: "Profit below minimum",
 };
 
 function TierBadge({ tier, className }: { tier: Tier; className?: string }) {
@@ -130,7 +141,7 @@ function Reasons({ reasons }: { reasons: string[] }) {
           key={l}
           className={cn(
             "rounded-md border px-1.5 py-0.5 text-[11px]",
-            /Accessory|Different|differs/.test(l)
+            /Accessory|Different|differs|below minimum/.test(l)
               ? "border-amber-200 bg-amber-50 text-amber-900"
               : "border-border bg-muted/60 text-muted-foreground",
           )}
@@ -178,6 +189,37 @@ function SupplierLine({ c }: { c: Candidate }) {
         profit {moneyIn(c.estimatedProfitMinor, c.currency)} ({c.marginPct.toFixed(1)}%)
       </span>
     </p>
+  );
+}
+
+function Only47({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+      Only ≥ 4.7★
+    </label>
+  );
+}
+
+function CandidateRow({ c, rank, muted }: { c: Candidate; rank: number; muted?: boolean }) {
+  return (
+    <div className={cn("flex flex-wrap gap-3 px-4 py-3 sm:flex-nowrap", muted && "bg-muted/30")}>
+      <span className="w-5 shrink-0 pt-1 text-xs text-muted-foreground tabular-nums">{rank}</span>
+      <Thumb src={c.imageUrl} className="size-16" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <a href={c.url} target="_blank" rel="noreferrer" className="line-clamp-2 text-sm font-medium hover:text-primary hover:underline">
+          {c.title}
+        </a>
+        <SubScores c={c} />
+        <Reasons reasons={c.meetsProfit === false ? [...c.reasons, "profit_below_min"] : c.reasons} />
+        <SupplierLine c={c} />
+      </div>
+      <div className="w-32 shrink-0 space-y-1.5 text-right">
+        <p className="text-xl font-semibold tabular-nums">{c.confidence}%</p>
+        <ScoreBar value={c.confidence} tier={c.tier} />
+        <TierBadge tier={c.tier} className="mt-1" />
+      </div>
+    </div>
   );
 }
 
@@ -263,7 +305,12 @@ export default function SourceFinderPage() {
 
   const result = lookup?.result ?? null;
   const candidates = useMemo(() => (result?.candidates ?? []).filter((c) => !only47 || (c.rating ?? 0) >= 4.7), [result, only47]);
-  const best = candidates[0];
+  const floor = result?.profit ?? null;
+  const floorLabel = floor ? `$${(floor.minProfitUsdMinor / 100).toFixed(2)}` : "";
+  const profitableList = floor ? candidates.filter((c) => c.meetsProfit !== false) : candidates;
+  const belowList = floor ? candidates.filter((c) => c.meetsProfit === false) : [];
+  const best = profitableList[0] ?? belowList[0];
+  const noneProfitable = floor != null && (result?.candidates.length ?? 0) > 0 && profitableList.length === 0;
   const noHigh = result != null && !(result.candidates ?? []).some((c) => c.tier === "HIGH");
 
   return (
@@ -335,6 +382,21 @@ export default function SourceFinderPage() {
                     {result.stats.imageFailures ? ` · ${result.stats.imageFailures} photo(s) couldn't load` : ""} ·{" "}
                     {(result.stats.durationMs / 1000).toFixed(1)}s · checked {relativeTime(lookup?.updatedAt)}
                   </p>
+                  {floor ? (
+                    <p className="text-xs">
+                      Max AliExpress price for <strong>{floorLabel}</strong> profit:{" "}
+                      <strong className="tabular-nums">
+                        {floor.maxSupplierPriceMinor > 0 ? moneyIn(floor.maxSupplierPriceMinor, result.ebay.currency) : "none"}
+                      </strong>{" "}
+                      <span className="text-muted-foreground">
+                        (after eBay fees and {moneyIn(floor.shippingEstimateMinor, result.ebay.currency)} estimated shipping
+                        {result.ebay.currency !== "USD"
+                          ? ` · $1 = ${floor.usdRate.toFixed(2)} ${result.ebay.currency}${floor.rateSource === "fallback" ? ", offline rate" : ""}`
+                          : ""}
+                        )
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex items-start gap-2">
                   <Button size="sm" variant="outline" onClick={() => lookup && void run(lookup.ebayUrl, lookup.id)} disabled={running}>
@@ -350,7 +412,20 @@ export default function SourceFinderPage() {
               </CardContent>
             </Card>
 
-            {noHigh ? (
+            {noneProfitable && floor && result ? (
+              <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <p>
+                  <strong>No AliExpress source leaves {floorLabel} profit</strong> at this eBay price.{" "}
+                  {floor.maxSupplierPriceMinor > 0
+                    ? `To clear it, the AliExpress item must cost ${moneyIn(floor.maxSupplierPriceMinor, result.ebay.currency)} or less. `
+                    : "No supplier price can clear it after eBay fees and shipping. "}
+                  The closest matches are shown below.
+                </p>
+              </div>
+            ) : null}
+
+            {noHigh && !noneProfitable ? (
               <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
                 <p>
@@ -361,9 +436,17 @@ export default function SourceFinderPage() {
             ) : null}
 
             {best ? (
-              <Card className={cn("border-2", best.tier === "HIGH" ? "border-emerald-300" : "border-border")}>
+              <Card className={cn("border-2", best.tier === "HIGH" && best.meetsProfit !== false ? "border-emerald-300" : "border-border")}>
                 <CardHeader>
-                  <CardDescription>{best.tier === "HIGH" ? "Best match" : "Closest candidate"}</CardDescription>
+                  <CardDescription>
+                    {best.meetsProfit === false
+                      ? `Closest match (below ${floorLabel} profit)`
+                      : best.tier === "HIGH"
+                        ? floor
+                          ? "Best profitable match"
+                          : "Best match"
+                        : "Closest profitable candidate"}
+                  </CardDescription>
                   <div className="flex flex-wrap items-center gap-3">
                     <CardTitle className="text-4xl font-semibold tabular-nums">{best.confidence}%</CardTitle>
                     <TierBadge tier={best.tier} />
@@ -383,7 +466,7 @@ export default function SourceFinderPage() {
                   <div className="min-w-0 space-y-2.5">
                     <p className="text-base font-medium leading-snug">{best.title}</p>
                     <SubScores c={best} />
-                    <Reasons reasons={best.reasons} />
+                    <Reasons reasons={best.meetsProfit === false ? [...best.reasons, "profit_below_min"] : best.reasons} />
                     <SupplierLine c={best} />
                     <p className="text-xs text-muted-foreground">
                       Landed cost {moneyIn(best.priceMinor + best.shippingMinor, best.currency)}
@@ -409,50 +492,46 @@ export default function SourceFinderPage() {
               </p>
             ) : null}
 
-            {candidates.length > 1 ? (
+            {profitableList.length > 1 || (profitableList.length === 1 && best !== profitableList[0]) ? (
               <Card>
                 <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
                   <div>
-                    <CardTitle>All candidates</CardTitle>
+                    <CardTitle>{floor ? `Profitable sources (≥ ${floorLabel} profit)` : "All candidates"}</CardTitle>
                     <CardDescription>Ranked by confidence. High ≥ 75, Medium 50–74, Low under 50.</CardDescription>
                   </div>
-                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={only47}
-                      onChange={(e) => setOnly47(e.target.checked)}
-                      className="size-4 accent-[var(--primary)]"
-                    />
-                    Only ≥ 4.7★
-                  </label>
+                  <Only47 checked={only47} onChange={setOnly47} />
                 </CardHeader>
                 <CardContent className="divide-y divide-border p-0">
-                  {candidates.slice(1).map((c, i) => (
-                    <div key={c.productId} className="flex flex-wrap gap-3 px-4 py-3 sm:flex-nowrap">
-                      <span className="w-5 shrink-0 pt-1 text-xs text-muted-foreground tabular-nums">{i + 2}</span>
-                      <Thumb src={c.imageUrl} className="size-16" />
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <a
-                          href={c.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="line-clamp-2 text-sm font-medium hover:text-primary hover:underline"
-                        >
-                          {c.title}
-                        </a>
-                        <SubScores c={c} />
-                        <Reasons reasons={c.reasons} />
-                        <SupplierLine c={c} />
-                      </div>
-                      <div className="w-32 shrink-0 space-y-1.5 text-right">
-                        <p className="text-xl font-semibold tabular-nums">{c.confidence}%</p>
-                        <ScoreBar value={c.confidence} tier={c.tier} />
-                        <TierBadge tier={c.tier} className="mt-1" />
-                      </div>
-                    </div>
-                  ))}
+                  {profitableList
+                    .filter((c) => c !== best)
+                    .map((c, i) => (
+                      <CandidateRow key={c.productId} c={c} rank={i + 2} />
+                    ))}
                 </CardContent>
               </Card>
+            ) : null}
+
+            {belowList.filter((c) => c !== best).length > 0 ? (
+              <details className="group rounded-xl border border-border bg-card" open={noneProfitable}>
+                <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3">
+                  <span>
+                    <span className="font-medium">
+                      Below {floorLabel} profit ({belowList.filter((c) => c !== best).length})
+                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      Same or similar products that are too expensive on AliExpress
+                    </span>
+                  </span>
+                  {profitableList.length <= 1 ? <Only47 checked={only47} onChange={setOnly47} /> : null}
+                </summary>
+                <div className="divide-y divide-border border-t border-border">
+                  {belowList
+                    .filter((c) => c !== best)
+                    .map((c, i) => (
+                      <CandidateRow key={c.productId} c={c} rank={i + (noneProfitable ? 2 : 1)} muted />
+                    ))}
+                </div>
+              </details>
             ) : null}
           </>
         ) : !running && !error ? (
