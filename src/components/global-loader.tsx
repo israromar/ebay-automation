@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -264,15 +255,7 @@ export function useGlobalLoader() {
  * Never captures clicks — sidebar and page stay usable.
  * Route-only: slim top bar. Data fetches: soft card + top bar.
  */
-function GlobalLoaderChrome({
-  visible,
-  label,
-  routeOnly,
-}: {
-  visible: boolean;
-  label: string;
-  routeOnly: boolean;
-}) {
+function GlobalLoaderChrome({ visible, label, routeOnly }: { visible: boolean; label: string; routeOnly: boolean }) {
   return (
     <>
       <div

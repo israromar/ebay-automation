@@ -70,8 +70,7 @@ export default function LoginForm() {
               Match AliExpress supply.
             </h1>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-blue-100/90">
-              Invite-only research desk for high-margin sourcing — Browse clusters, visual AE matches, and approval before
-              export.
+              Invite-only research desk for high-margin sourcing — Browse clusters, visual AE matches, and approval before export.
             </p>
           </div>
 
@@ -116,8 +115,8 @@ export default function LoginForm() {
           </Badge>
           <h2 className="text-2xl font-semibold tracking-tight">{mode === "signin" ? "Welcome back" : "Create your seat"}</h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Sign in with the email on <span className="font-mono text-xs">ALLOWED_EMAILS</span>. Shared platform keys power
-            research for your workspace.
+            Sign in with the email on <span className="font-mono text-xs">ALLOWED_EMAILS</span>. Shared platform keys power research for
+            your workspace.
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">

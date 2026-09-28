@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "regexSubstitution": "https://www.aliexpress.com/item/\\3.html"
+      }
+    },
+    "condition": {
+      "regexFilter": "^https://([a-z0-9-]+\\.)?aliexpress\\.(com|us)/(?:ssr|gcp)/[^?#]*\\?(?:[^#]*&)?productIds=(\\d{8,20})[^#]*(?:#.*)?$",
+      "resourceTypes": ["main_frame"]
+    }
+  }
+]

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { describeDatabaseError, prisma } from "@/lib/db";
 import { isAuthDisabled, isEmailAllowed } from "@/lib/auth/allowlist";
 import { createClient } from "@/lib/auth/supabase-server";
 import { ensureDefaultWorkspace } from "@/lib/services/providers";
@@ -49,6 +49,8 @@ export async function requireSessionWorkspace(): Promise<SessionWorkspace | Next
     });
     return session;
   } catch (error) {
+    const setupMessage = describeDatabaseError(error);
+    if (setupMessage) return NextResponse.json({ error: setupMessage }, { status: 503 });
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: `Workspace bootstrap failed: ${message}` }, { status: 500 });
   }

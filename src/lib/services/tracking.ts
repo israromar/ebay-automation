@@ -12,12 +12,29 @@ type ListingForSnapshot = {
   demandSource: string;
   itemCreationDate: Date | null;
   lastSnapshotAt: Date | null;
+  purchaseHistoryAt?: Date | null;
 };
 
+/** Exact purchase-history counts stay authoritative for this long before snapshots take over again. */
+export const PURCHASE_HISTORY_FRESH_MS = 7 * DAY_MS;
+
 /**
- * Append a lifetime-sold snapshot (if due) and recompute the 30-day demand tier.
- * Terapeak-imported demand stays authoritative until the tracker itself reaches VERIFIED.
+ * Which demand number wins when a snapshot is recorded:
+ *  - a purchase-history count (exact) younger than 7 days always wins;
+ *  - a Terapeak import wins until the snapshot tracker itself reaches VERIFIED.
  */
+export function keepImportedDemand(
+  listing: Pick<ListingForSnapshot, "demandSource" | "purchaseHistoryAt">,
+  snapshotTier: string,
+  now = new Date(),
+): boolean {
+  if (listing.demandSource === "purchase_history") {
+    return Boolean(listing.purchaseHistoryAt && now.getTime() - listing.purchaseHistoryAt.getTime() < PURCHASE_HISTORY_FRESH_MS);
+  }
+  return listing.demandSource === "terapeak" && snapshotTier !== "VERIFIED";
+}
+
+/** Append a lifetime-sold snapshot (if due) and recompute the 30-day demand tier. */
 export async function recordSnapshot(listing: ListingForSnapshot, details: EbayItemDetails, now = new Date()) {
   const due = !listing.lastSnapshotAt || now.getTime() - listing.lastSnapshotAt.getTime() >= SNAPSHOT_MIN_GAP_MS;
   if (due && details.estimatedSoldQuantity != null) {
@@ -34,7 +51,7 @@ export async function recordSnapshot(listing: ListingForSnapshot, details: EbayI
   const snapshots: SnapshotPoint[] = rows;
   const itemCreationDate = details.itemCreationDate ?? listing.itemCreationDate;
   const demand = computeDemand({ snapshots, itemCreationDate, now });
-  const keepTerapeak = listing.demandSource === "terapeak" && demand.tier !== "VERIFIED";
+  const keepImported = keepImportedDemand(listing, demand.tier, now);
 
   return prisma.trackedListing.update({
     where: { id: listing.id },
@@ -47,7 +64,7 @@ export async function recordSnapshot(listing: ListingForSnapshot, details: EbayI
       itemCreationDate,
       lifetimeSold: details.estimatedSoldQuantity ?? undefined,
       lastSnapshotAt: due ? now : undefined,
-      ...(keepTerapeak ? {} : { sold30d: demand.sold30d, demandTier: demand.tier, demandSource: "browse_tracker" }),
+      ...(keepImported ? {} : { sold30d: demand.sold30d, demandTier: demand.tier, demandSource: "browse_tracker" }),
       ...(details.outOfStock || (details.itemEndDate && details.itemEndDate < now)
         ? { active: false, endedReason: details.outOfStock ? "out_of_stock" : "ended" }
         : {}),

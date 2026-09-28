@@ -39,3 +39,13 @@ export async function fetchJson<T>(url: string, init?: RequestInit & { silent?: 
   }
   return json;
 }
+
+/** Money in any currency (source finder works on ebay.co.uk in GBP, ebay.de in EUR, …). */
+export function moneyIn(minor: number | null | undefined, currency = "USD") {
+  if (minor == null) return "—";
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(minor / 100);
+  } catch {
+    return `${(minor / 100).toFixed(2)} ${currency}`;
+  }
+}

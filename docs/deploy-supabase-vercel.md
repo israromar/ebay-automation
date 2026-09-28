@@ -33,12 +33,25 @@ npx prisma migrate deploy
 
 Each run has a budget of about 50 seconds. In that time it:
 
-1. Snapshots due listings (20 per eBay `getItems` call). This is roughly 1,000 listings per run, and listings snapshotted in the last 20 hours are skipped.
+1. Snapshots due listings, about 1,000 per run. Listings snapshotted in the last 20 hours are skipped.
 2. Recomputes demand tiers. It stops tracking ended or out-of-stock listings, and listings that sell under 25% of the threshold after 14 days.
 3. Re-sources listings that have become winners, whose sources are older than 7 days, or whose last sourcing attempt failed.
 4. Finishes hunts left running when a browser tab was closed.
 
 If you track more listings than fit in one run, add a second cron entry (Pro plan), or run `npm run snapshot -- --all` from any machine or CI job with the same env.
+
+### Companion extension
+
+- `npm run build` (and `npm run dev`) run `npm run ext:build` first, so every deploy serves an up-to-date zip from Settings → Hunter Companion (`/api/settings/extension/download`). If a custom build command skips it, the download shows an error saying so. The app URL baked into it is `HUNTER_APP_URL` if set, otherwise Vercel's `VERCEL_PROJECT_PRODUCTION_URL`.
+- Migration `20260927150000_companion_extension` adds `ExtensionToken` (RLS on) and purchase-history columns. Run `npx prisma migrate deploy`.
+- `/api/extension/*` skips the session middleware and is authenticated by the extension's bearer token.
+- Optional: `EXTENSION_DAILY_CAP` (default 300 checks per workspace per day).
+
+### Source finder
+
+- Migration `20260928090000_source_lookup` adds `SourceLookup` (RLS on). Run `npx prisma migrate deploy`.
+- A lookup runs inside one API request (45 s budget, usually 5 to 25 s). It uses `sharp` for image fingerprints, which already ships with the app.
+- Optional: `MAX_SOURCE_LOOKUPS_PER_DAY` (default 60).
 
 ### Function limits
 
@@ -47,7 +60,10 @@ If you track more listings than fit in one run, add a second cron entry (Pro pla
 
 ## API quotas
 
-- **eBay Browse:** the default quota is 5,000 calls a day. A keyword costs about 11 calls (1 search + 10 `getItems` batches). Daily tracking costs 1 call per 20 listings.
+- **eBay Browse:** the default quota is 5,000 calls a day, and each `getItem` counts as one call.
+  - The batch `getItems` method (20 listings per call) is restricted to approved Buy API partners. Standard keysets get `403 Insufficient permissions`; the app detects this and switches to single `getItem` calls automatically.
+  - **Without batch access:** a keyword costs about 101 calls (1 search + 100 listings), and tracking costs 1 call per listing per day. For example, 20 keywords a day plus 2,000 tracked listings uses about 4,000 calls. Lower `EBAY_DETAILS_PER_KEYWORD` or ask eBay for a higher quota (Application Growth Check) if you need more.
+  - **With batch access:** a keyword costs about 11 calls, and tracking costs 1 call per 20 listings.
 - **AliExpress Affiliate:** about 4 to 5 calls per sourced listing.
 - `MAX_HUNTS_PER_DAY` (default 30) caps hunts plus imports per workspace.
 

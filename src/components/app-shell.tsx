@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Flame, FileUp, Search, Settings, LogOut, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Flame, FileUp, ScanSearch, Search, Settings, LogOut, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ const SIDEBAR_KEY = "pulse-sidebar-collapsed";
 
 const nav = [
   { href: "/", label: "Hunt", icon: Flame },
+  { href: "/source-finder", label: "Source finder", icon: ScanSearch },
   { href: "/import", label: "Terapeak import", icon: FileUp },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
