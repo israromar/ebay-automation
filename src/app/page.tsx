@@ -180,10 +180,10 @@ export default function HuntPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Winning product hunter</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">eBay UK opportunity dashboard</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Finds eBay listings selling <strong>{data?.settings.minSold30d ?? 20}+ units in the last 30 days</strong> and pairs each with an
-            AliExpress source rated <strong>{data?.settings.minAeRating ?? 4.7}★ or higher</strong> that still leaves a profit.
+            Finds demand candidates selling <strong>{data?.settings.minSold30d ?? 20}+ units in the last 30 days</strong> and pairs each with an
+            AliExpress source rated <strong>{data?.settings.minAeRating ?? 4.5}★ or higher</strong>. Final qualification still requires three distinct verified sellers.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
@@ -214,7 +214,7 @@ export default function HuntPage() {
             <CardTitle className="flex items-center gap-2">
               <Flame className="size-4 text-primary" aria-hidden /> New hunt
             </CardTitle>
-            <CardDescription>Enter niches or products, one per line. Leave empty to hunt the trending US keyword list.</CardDescription>
+            <CardDescription>Enter niches or products, one per line. Automotive candidates receive priority.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Textarea
@@ -377,7 +377,7 @@ export default function HuntPage() {
             <Input
               value={minRating}
               onChange={(e) => setMinRating(e.target.value)}
-              placeholder={`Min ★ (${data?.settings.minAeRating ?? 4.7})`}
+              placeholder={`Min ★ (${data?.settings.minAeRating ?? 4.5})`}
               inputMode="decimal"
               className="h-8 w-28"
               aria-label="Minimum AliExpress rating"

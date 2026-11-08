@@ -1,6 +1,6 @@
-# Winning Product Hunter (eBay → AliExpress)
+# MarketProof (eBay UK → AliExpress)
 
-One feature, done properly: find **eBay listings selling ≥ 20 units in the last 30 days** and pair each one with an **AliExpress source rated ≥ 4.7★** that still leaves a profit.
+An evidence-first dashboard and companion extension for finding eBay UK demand candidates and validating AliExpress sources. Current hunts verify listing-level demand; full qualification additionally requires three distinct equivalent sellers and remains a documented next milestone until that aggregation is implemented.
 
 Both thresholds (and every other gate) are editable in **Settings**.
 
@@ -13,7 +13,7 @@ keywords (typed, or the trending US list)
    ▼  getItems (20 per call): lifetime sold + listing creation date
    ▼  30-day demand estimate → shortlist listings at or above the threshold
    ▼  AliExpress Affiliate API: product.query + hotproduct + smartmatch
-   ▼  hard gate: rating ≥ 4.7, reviews, orders, title match, landed cost < eBay, margin
+   ▼  hard gate: rating ≥ 4.5, 500 product orders, title match, landed cost < eBay, 20% margin
    ▼  top 3 sources saved per listing
    ▼  daily cron: snapshot lifetime sold again → demand becomes measured
 ```
@@ -40,16 +40,16 @@ A **winner** has Projected or Verified demand at or above the threshold, **and**
 
 A source must pass **all** of these:
 
-- Rating ≥ 4.7. A missing rating is a fail.
+- Rating ≥ 4.5 when the field is an explicit five-star metric. A missing or ambiguous reputation metric is not a pass.
 - Reviews ≥ 20.
-- Orders ≥ 50.
+- Product-listing orders ≥ 500.
 - Title-match confidence ≥ 70. This reuses the matcher in `src/lib/domain/matching.ts`: pack-size, accessory and context checks.
 - Landed cost below the eBay price.
-- Net margin ≥ 10% after eBay fees.
+- Target net margin ≥ 20% after eBay fees and configured costs.
 
 Notes on the numbers:
 
-- The Affiliate API returns `evaluate_rate` as a percentage of positive feedback. It is converted as `% ÷ 20`, so 94% becomes 4.7★.
+- The Affiliate API returns `evaluate_rate` as positive feedback. The current adapter exposes its legacy conversion for compatibility, but the research plan requires preserving the original metric and scale before full qualification.
 - The Affiliate API does not return shipping. The **AE shipping estimate** from Settings is used instead and labelled "est." in the UI.
 
 ## Source finder (eBay link → AliExpress source)

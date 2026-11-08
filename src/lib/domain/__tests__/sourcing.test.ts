@@ -20,7 +20,7 @@ function ae(overrides: Partial<AliExpressProduct> = {}): AliExpressProduct {
 }
 
 describe("gateSource", () => {
-  it("passes a strong, profitable, 4.7+ source", () => {
+  it("passes a strong, profitable source at the configured thresholds", () => {
     const g = gateSource(ebay, ae(), "resistance bands", DEFAULT_SOURCING_RULES);
     expect(g.reasons).toEqual([]);
     expect(g.passed).toBe(true);
@@ -28,9 +28,9 @@ describe("gateSource", () => {
     expect(g.shippingMinor).toBe(DEFAULT_SOURCING_RULES.aeShippingEstimateMinor);
   });
 
-  it("enforces rating >= 4.7 exactly and rejects missing ratings", () => {
-    expect(gateSource(ebay, ae({ rating: 4.7 }), "resistance bands", DEFAULT_SOURCING_RULES).passed).toBe(true);
-    expect(gateSource(ebay, ae({ rating: 4.69 }), "resistance bands", DEFAULT_SOURCING_RULES).reasons).toContain("rating_below_min");
+  it("enforces rating >= 4.5 exactly and rejects missing ratings", () => {
+    expect(gateSource(ebay, ae({ rating: 4.5 }), "resistance bands", DEFAULT_SOURCING_RULES).passed).toBe(true);
+    expect(gateSource(ebay, ae({ rating: 4.49 }), "resistance bands", DEFAULT_SOURCING_RULES).reasons).toContain("rating_below_min");
     expect(gateSource(ebay, ae({ rating: undefined }), "resistance bands", DEFAULT_SOURCING_RULES).reasons).toContain("rating_missing");
   });
 

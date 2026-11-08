@@ -37,16 +37,16 @@ model HuntSettings {
   workspaceId             String    @unique
   workspace               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   minSold30d              Int       @default(20)
-  minAeRating             Float     @default(4.7)
+  minAeRating             Float     @default(4.5)
   minAeReviews            Int       @default(20)
-  minAeOrders             Int       @default(50)
+  minAeOrders             Int       @default(500)
   minMatchConfidence      Int       @default(70)
-  minMarginPct            Float     @default(10)
-  ebayFeeRate             Float     @default(0.1325)
+  minMarginPct            Float     @default(20)
+  ebayFeeRate             Float     @default(0.128)
   aeShippingEstimateMinor Int       @default(300)
   extraCostMinor          Int       @default(0)
-  minEbayPriceMinor       Int       @default(800)
-  maxEbayPriceMinor       Int       @default(15000)
+  minEbayPriceMinor       Int       @default(5000)
+  maxEbayPriceMinor       Int       @default(100000)
   updatedAt               DateTime  @updatedAt
 }
 

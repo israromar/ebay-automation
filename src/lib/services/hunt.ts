@@ -103,7 +103,7 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
           sourcedCount: { increment: sourced.withSources },
           logJson: appendLog(
             hunt.logJson,
-            `Sourced ${sourced.done} listing(s) on AliExpress · ${sourced.withSources} with a qualifying 4.7★+ source`,
+            `Sourced ${sourced.done} listing(s) on AliExpress · ${sourced.withSources} with a qualifying supplier`,
           ),
         },
       });

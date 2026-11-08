@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toCsv } from "@/lib/export/csv";
 import { AliExpressOfficialApiProvider } from "@/lib/providers/aliexpress-official";
-import { EbayAccessError, EbayBrowseApiProvider, EbayConfigError, isEbayBatchAvailable, mapItemDetails } from "@/lib/providers/ebay-browse";
+import {
+  EbayAccessError,
+  EbayBrowseApiProvider,
+  EbayConfigError,
+  ebayMarketplaceProfile,
+  isEbayBatchAvailable,
+  mapItemDetails,
+} from "@/lib/providers/ebay-browse";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -12,6 +19,11 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("EbayBrowseApiProvider", () => {
+  it("uses the UK marketplace profile by default", () => {
+    expect(ebayMarketplaceProfile()).toEqual({ marketplaceId: "EBAY_GB", country: "GB", currency: "GBP" });
+    expect(ebayMarketplaceProfile("EBAY_US")).toEqual({ marketplaceId: "EBAY_US", country: "US", currency: "USD" });
+  });
+
   it("throws a config error instead of returning fixtures when keys are missing", async () => {
     const ebay = new EbayBrowseApiProvider({ clientId: "", clientSecret: "" });
     await expect(ebay.searchProducts({ keyword: "blender" })).rejects.toBeInstanceOf(EbayConfigError);
@@ -56,7 +68,7 @@ describe("EbayBrowseApiProvider", () => {
         });
       }),
     );
-    const ebay = new EbayBrowseApiProvider({ clientId: "id", clientSecret: "secret" });
+    const ebay = new EbayBrowseApiProvider({ clientId: "id", clientSecret: "secret", marketplaceId: "EBAY_US" });
     const ids = Array.from({ length: 45 }, (_, i) => `v1|${100000000 + i}|0`);
     const details = await ebay.getItemsBatch(ids);
     expect(details.size).toBe(45);

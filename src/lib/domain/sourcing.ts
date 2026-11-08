@@ -15,12 +15,12 @@ export interface SourcingRules {
 }
 
 export const DEFAULT_SOURCING_RULES: SourcingRules = {
-  minAeRating: 4.7,
+  minAeRating: 4.5,
   minAeReviews: 20,
-  minAeOrders: 50,
+  minAeOrders: 500,
   minMatchConfidence: 70,
-  minMarginPct: 10,
-  ebayFeeRate: 0.1325,
+  minMarginPct: 20,
+  ebayFeeRate: 0.128,
   aeShippingEstimateMinor: 300,
   extraCostMinor: 0,
 };

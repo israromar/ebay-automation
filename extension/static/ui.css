@@ -74,6 +74,11 @@ h2 {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.links {
+  justify-content: space-between;
+  padding: 2px 2px 0;
+  font-size: 12px;
+}
 button {
   cursor: pointer;
   padding: 5px 12px;

@@ -101,7 +101,10 @@ async function draw() {
   root.append(state);
 
   const open = h("a", { href: s.settings.appUrl, target: "_blank" }, "Open Hunter →");
-  root.append(open);
+  const framework = h("a", { href: `${s.settings.appUrl}/research-plan`, target: "_blank" }, "Research framework →");
+  const links = h("div", { class: "row links" });
+  links.append(open, framework);
+  root.append(links);
 }
 
 document.getElementById("options")!.addEventListener("click", (e) => {

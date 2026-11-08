@@ -16,8 +16,8 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Winning Product Hunter",
-  description: "Find eBay products selling 20+ a month and source them from 4.7★+ AliExpress suppliers",
+  title: "MarketProof — eBay UK Product Research",
+  description: "Evidence-first eBay UK demand research and AliExpress supplier validation",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

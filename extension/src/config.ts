@@ -5,7 +5,7 @@ declare const __HUNTER_APP_URL__: string;
 declare const __EBAY_ORIGIN__: string;
 
 export const DEFAULT_APP_URL = __HUNTER_APP_URL__;
-/** Always https://www.ebay.com in real builds; a local mock origin only in e2e test builds. */
+/** UK eBay by default; a local mock origin is supported for e2e builds. */
 export const EBAY_ORIGIN = __EBAY_ORIGIN__;
 
 export interface Settings {
@@ -75,7 +75,7 @@ export type Message =
   | { type: "verifyNow"; itemUrl: string };
 
 export function money(minor: number | null | undefined): string {
-  return minor == null ? "—" : `$${(minor / 100).toFixed(2)}`;
+  return minor == null ? "—" : `£${(minor / 100).toFixed(2)}`;
 }
 
 /** Legacy numeric id from an eBay item URL or id. */

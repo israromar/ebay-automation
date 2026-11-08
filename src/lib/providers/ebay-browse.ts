@@ -90,6 +90,19 @@ const SINGLE_ITEM_CONCURRENCY = 6;
  */
 let batchUnavailable = process.env.EBAY_GET_ITEMS_BATCH === "false";
 
+const MARKETPLACE_PROFILES = {
+  EBAY_GB: { marketplaceId: "EBAY_GB", country: "GB", currency: "GBP" },
+  EBAY_US: { marketplaceId: "EBAY_US", country: "US", currency: "USD" },
+} as const;
+
+export function ebayMarketplaceProfile(marketplaceId = "EBAY_GB") {
+  return MARKETPLACE_PROFILES[marketplaceId as keyof typeof MARKETPLACE_PROFILES] ?? {
+    marketplaceId,
+    country: "GB",
+    currency: "GBP",
+  };
+}
+
 export function isEbayBatchAvailable() {
   return !batchUnavailable;
 }
@@ -155,7 +168,7 @@ export class EbayBrowseApiProvider {
   ) {}
 
   private get marketplaceId() {
-    return this.config.marketplaceId ?? "EBAY_US";
+    return ebayMarketplaceProfile(this.config.marketplaceId).marketplaceId;
   }
 
   private get baseUrl() {
@@ -168,11 +181,12 @@ export class EbayBrowseApiProvider {
 
   async searchProducts(input: EbaySearchInput): Promise<EbaySearchResult[]> {
     const wanted = Math.min(Math.max(input.limit ?? PAGE_SIZE, 1), 1000);
-    const filters = ["buyingOptions:{FIXED_PRICE}", "conditions:{NEW}", "deliveryCountry:US"];
+    const marketplace = ebayMarketplaceProfile(this.marketplaceId);
+    const filters = ["buyingOptions:{FIXED_PRICE}", "conditions:{NEW}", `deliveryCountry:${marketplace.country}`];
     if (input.minPriceMinor != null || input.maxPriceMinor != null) {
       const lo = input.minPriceMinor != null ? (input.minPriceMinor / 100).toFixed(2) : "";
       const hi = input.maxPriceMinor != null ? (input.maxPriceMinor / 100).toFixed(2) : "";
-      filters.push(`price:[${lo}..${hi}]`, "priceCurrency:USD");
+      filters.push(`price:[${lo}..${hi}]`, `priceCurrency:${marketplace.currency}`);
     }
 
     const results = new Map<string, EbaySearchResult>();

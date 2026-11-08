@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Flame, FileUp, ScanSearch, Search, Settings, LogOut, PanelLeftClose, PanelLeft } from "lucide-react";
+import { BookOpenCheck, Flame, FileUp, ScanSearch, Search, Settings, LogOut, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ const nav = [
   { href: "/", label: "Hunt", icon: Flame },
   { href: "/source-finder", label: "Source finder", icon: ScanSearch },
   { href: "/import", label: "Terapeak import", icon: FileUp },
+  { href: "/research-plan", label: "Research framework", icon: BookOpenCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -113,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <div className={cn("flex items-start gap-2 py-4", collapsed ? "justify-center px-2" : "px-4")}>
             <div className={cn("min-w-0 flex-1 overflow-hidden", collapsed && "hidden")}>
-              <p className="truncate text-[15px] font-bold tracking-tight text-primary">Product Hunter</p>
+              <p className="truncate text-[15px] font-bold tracking-tight text-primary">MarketProof</p>
               <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">{workspace ?? "Personal workspace"}</p>
             </div>
             <Button
@@ -170,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Image src="/media/product-packaging.jpg" alt="" width={400} height={160} className="h-20 w-full object-cover" />
               <div className="bg-muted/70 px-3 py-2">
                 <p className="text-[11px] font-medium text-foreground">eBay → AliExpress</p>
-                <p className="text-[10px] text-muted-foreground">20+ sold / 30d · 4.7★+ sources</p>
+                <p className="text-[10px] text-muted-foreground">UK evidence · 500+ orders · 20% margin</p>
               </div>
             </div>
             {email ? (
@@ -218,7 +219,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tracked products…" className="h-9 pl-8" />
             </form>
             <div className="ml-auto hidden items-center gap-4 text-sm text-muted-foreground md:flex">
-              <span>eBay US · USD</span>
+              <span>eBay UK · GBP</span>
             </div>
             <Avatar className="ml-1 size-8" title={email ?? undefined}>
               <AvatarFallback className="bg-primary text-[11px] font-semibold text-primary-foreground">{initials}</AvatarFallback>

@@ -28,7 +28,7 @@ function appUrl(): string {
 }
 
 const APP_URL = appUrl();
-const EBAY_ORIGIN = (process.env.EXT_EBAY_ORIGIN?.trim() || "https://www.ebay.com").replace(/\/+$/, "");
+const EBAY_ORIGIN = (process.env.EXT_EBAY_ORIGIN?.trim() || "https://www.ebay.co.uk").replace(/\/+$/, "");
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as { version: string };
 
 const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
@@ -42,9 +42,9 @@ function manifest() {
   const ebayMatch = `${EBAY_ORIGIN}/*`;
   return {
     manifest_version: 3,
-    name: "Hunter Companion",
+    name: "MarketProof Companion",
     version: pkg.version.replace(/[^0-9.]/g, "") || "0.1.0",
-    description: "Exact eBay 30-day sold counts from purchase history for Winning Product Hunter, and skips AliExpress bundle deals.",
+    description: "Evidence collection for MarketProof eBay UK and AliExpress product research.",
     icons: { 16: "icons/16.png", 32: "icons/32.png", 48: "icons/48.png", 128: "icons/128.png" },
     action: { default_popup: "popup.html", default_icon: { 16: "icons/16.png", 32: "icons/32.png" } },
     options_page: "options.html",
@@ -114,7 +114,7 @@ async function main() {
   writeFileSync(zipPath, zipSync(files, { level: 9 }));
 
   console.log(
-    `Hunter Companion → ${path.relative(root, dist)} and ${path.relative(root, zipPath)} (app ${APP_URL}${EBAY_ORIGIN !== "https://www.ebay.com" ? `, eBay ${EBAY_ORIGIN}` : ""})`,
+    `MarketProof Companion → ${path.relative(root, dist)} and ${path.relative(root, zipPath)} (app ${APP_URL}, eBay ${EBAY_ORIGIN})`,
   );
 }
 

@@ -105,7 +105,7 @@ export function HuntProgress({ hunt, pollError, onCancel }: { hunt: Hunt; pollEr
         </div>
         <p className="mt-1.5 text-xs text-muted-foreground">
           {Math.min(hunt.cursor, hunt.totalItems)} / {hunt.totalItems} {unit} · {hunt.scannedCount.toLocaleString()} eBay listings checked ·{" "}
-          {hunt.trackedCount} tracked · {hunt.sourcedCount} with a 4.7★+ source
+          {hunt.trackedCount} tracked · {hunt.sourcedCount} with a qualifying source
           {hunt.status === "COMPLETED" ? ` · ${hunt.winnerCount} winners` : ""}
         </p>
       </div>

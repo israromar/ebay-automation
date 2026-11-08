@@ -77,8 +77,8 @@ export type HuntSettingsValues = {
 export const DEFAULT_HUNT_SETTINGS: HuntSettingsValues = {
   minSold30d: 20,
   ...DEFAULT_SOURCING_RULES,
-  minEbayPriceMinor: 800,
-  maxEbayPriceMinor: 15000,
+  minEbayPriceMinor: 5000,
+  maxEbayPriceMinor: 100000,
 };
 
 export async function loadHuntSettings(workspaceId: string): Promise<HuntSettingsValues> {

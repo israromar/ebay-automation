@@ -36,7 +36,7 @@ const GROUPS: Array<{ title: string; description: string; fields: Field[] }> = [
     title: "eBay demand",
     description: "Which eBay listings count as winning products.",
     fields: [
-      { key: "minSold30d", label: "Minimum sold in last 30 days", hint: "Your target was 20–30.", kind: "int" },
+      { key: "minSold30d", label: "Minimum sold per competitor in 30 days", hint: "A candidate needs 20 verified units per seller.", kind: "int" },
       { key: "minEbayPriceMinor", label: "Minimum eBay price", hint: "Listings cheaper than this are skipped.", kind: "money" },
       { key: "maxEbayPriceMinor", label: "Maximum eBay price", hint: "Listings pricier than this are skipped.", kind: "money" },
     ],
@@ -48,12 +48,12 @@ const GROUPS: Array<{ title: string; description: string; fields: Field[] }> = [
       {
         key: "minAeRating",
         label: "Minimum rating (★ out of 5)",
-        hint: "Derived from % positive feedback: 94% = 4.7★.",
+        hint: "A five-star rating and positive-feedback percentage remain distinct evidence metrics.",
         kind: "float",
         step: "0.05",
       },
       { key: "minAeReviews", label: "Minimum reviews", hint: "", kind: "int" },
-      { key: "minAeOrders", label: "Minimum orders", hint: "Recent order volume reported by AliExpress.", kind: "int" },
+      { key: "minAeOrders", label: "Minimum product orders", hint: "Applies to the matched listing, not total store sales.", kind: "int" },
       {
         key: "minMatchConfidence",
         label: "Minimum match confidence (0–100)",
@@ -184,7 +184,7 @@ export default function SettingsPage() {
                 <Label htmlFor={f.key}>{f.label}</Label>
                 <div className="relative">
                   {f.kind === "money" ? (
-                    <span className="absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <span className="absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">£</span>
                   ) : null}
                   <Input
                     id={f.key}
@@ -198,7 +198,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   {f.hint}
                   {defaults
-                    ? ` Default ${f.kind === "money" ? "$" : ""}${toDisplay(f, defaults[f.key])}${f.kind === "percent" ? "%" : ""}.`
+                    ? ` Default ${f.kind === "money" ? "£" : ""}${toDisplay(f, defaults[f.key])}${f.kind === "percent" ? "%" : ""}.`
                     : ""}
                 </p>
               </div>

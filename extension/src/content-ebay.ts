@@ -65,7 +65,7 @@ function findSourceButton() {
   return btn;
 }
 
-/** Demand tracking (purchase history, hunts) is built for eBay US; other sites get the Source finder only. */
+/** Demand tracking follows the configured eBay origin; other sites get the Source finder only. */
 function isHunterSite() {
   return location.hostname === "www.ebay.com" || location.origin === EBAY_ORIGIN;
 }

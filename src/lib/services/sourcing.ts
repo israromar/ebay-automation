@@ -73,12 +73,16 @@ export async function sourceListing(
     priceMinor: number;
     shippingMinor: number | null;
     avgSoldPriceMinor: number | null;
+    currency: string;
   },
   rules: SourcingRules,
 ): Promise<SourcingOutcome> {
   // Terapeak rows without a live listing carry only an average sold price.
   const sellPrice = listing.priceMinor > 0 ? listing.priceMinor : (listing.avgSoldPriceMinor ?? 0);
-  const { products } = await retrieveAliExpressCandidates(ae, listing);
+  const { products } = await retrieveAliExpressCandidates(ae, listing, {
+    currency: listing.currency,
+    shipToCountry: listing.currency === "GBP" ? "GB" : "US",
+  });
   const { passed, rejected, considered } = selectTopSources(
     { title: listing.title, priceMinor: sellPrice, shippingMinor: listing.priceMinor > 0 ? listing.shippingMinor : 0 },
     products,

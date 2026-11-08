@@ -90,7 +90,7 @@ export default function ImportPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Import Terapeak sold data</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           Terapeak (free in eBay Seller Hub) shows real sold counts. Imported rows count as <strong>verified demand</strong> straight away.
-          The app links each row to a live eBay listing, keeps tracking it daily, and finds 4.7★+ AliExpress sources.
+          The app links each row to a live eBay listing, keeps tracking it daily, and finds qualifying AliExpress sources.
         </p>
       </header>
 

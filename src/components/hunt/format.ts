@@ -1,7 +1,7 @@
 export function money(minor: number | null | undefined, opts?: { signed?: boolean }) {
   if (minor == null) return "—";
   const abs = Math.abs(minor) / 100;
-  const s = abs.toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const s = abs.toLocaleString("en-GB", { style: "currency", currency: "GBP" });
   if (minor < 0) return `−${s}`;
   return opts?.signed ? `+${s}` : s;
 }

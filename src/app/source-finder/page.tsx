@@ -167,7 +167,7 @@ function SupplierLine({ c }: { c: Candidate }) {
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums">
       <span className="font-medium">{moneyIn(c.priceMinor, c.currency)}</span>
       {c.rating != null ? (
-        <span className={cn("inline-flex items-center gap-0.5", c.rating >= 4.7 ? "text-foreground" : "text-muted-foreground")}>
+        <span className={cn("inline-flex items-center gap-0.5", c.rating >= 4.5 ? "text-foreground" : "text-muted-foreground")}>
           <Star className="size-3 fill-amber-400 text-amber-400" aria-hidden /> {c.rating.toFixed(2)}
         </span>
       ) : (
@@ -190,7 +190,7 @@ export default function SourceFinderPage() {
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
-  const [only47, setOnly47] = useState(false);
+  const [onlyQualifiedRating, setOnlyQualifiedRating] = useState(false);
   const autoRan = useRef(false);
 
   const loadHistory = useCallback(async () => {
@@ -262,7 +262,10 @@ export default function SourceFinderPage() {
   }, []);
 
   const result = lookup?.result ?? null;
-  const candidates = useMemo(() => (result?.candidates ?? []).filter((c) => !only47 || (c.rating ?? 0) >= 4.7), [result, only47]);
+  const candidates = useMemo(
+    () => (result?.candidates ?? []).filter((candidate) => !onlyQualifiedRating || (candidate.rating ?? 0) >= 4.5),
+    [result, onlyQualifiedRating],
+  );
   const best = candidates[0];
   const noHigh = result != null && !(result.candidates ?? []).some((c) => c.tier === "HIGH");
 
@@ -404,7 +407,7 @@ export default function SourceFinderPage() {
             ) : lookup?.status === "no_candidates" || (result.candidates.length > 0 && candidates.length === 0) ? (
               <p className="text-sm text-muted-foreground">
                 {candidates.length === 0 && result.candidates.length > 0
-                  ? "No candidate rated 4.7★ or higher."
+                  ? "No candidate rated 4.5★ or higher."
                   : "AliExpress returned no products for this listing."}
               </p>
             ) : null}
@@ -419,11 +422,11 @@ export default function SourceFinderPage() {
                   <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      checked={only47}
-                      onChange={(e) => setOnly47(e.target.checked)}
+                      checked={onlyQualifiedRating}
+                      onChange={(event) => setOnlyQualifiedRating(event.target.checked)}
                       className="size-4 accent-[var(--primary)]"
                     />
-                    Only ≥ 4.7★
+                    Only ≥ 4.5★
                   </label>
                 </CardHeader>
                 <CardContent className="divide-y divide-border p-0">
