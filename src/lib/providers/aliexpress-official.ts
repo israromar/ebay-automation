@@ -5,6 +5,7 @@ import type { AliExpressProduct, AliExpressProductDetails, ProductSearchInput } 
 import type { AliExpressHotProductInput, AliExpressImageSearchInput, AliExpressProvider, AliExpressSmartMatchInput } from "./types";
 
 type GatewayParams = Record<string, string | number | boolean | undefined | null>;
+const PROVIDER_TIMEOUT_MS = 12_000;
 
 function gmt8Timestamp(date = new Date()): string {
   const offsetMs = 8 * 60 * 60 * 1000;
@@ -349,6 +350,7 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
         "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
       },
       body: new URLSearchParams(params),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
 
     const text = await res.text();
@@ -388,7 +390,11 @@ export class AliExpressOfficialApiProvider implements AliExpressProvider {
     new Uint8Array(imageBuffer).set(imageBytes);
     form.append("image_file_bytes", new Blob([imageBuffer], { type: "image/jpeg" }), "ebay-source.jpg");
 
-    const res = await fetch(this.gatewayUrl, { method: "POST", body: form });
+    const res = await fetch(this.gatewayUrl, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    });
     const text = await res.text();
     let json: unknown;
     try {

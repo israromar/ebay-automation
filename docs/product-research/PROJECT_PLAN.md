@@ -2,6 +2,8 @@
 
 The Next.js dashboard is the system of record. The Chrome extension is a companion evidence collector, not a separate product database.
 
+The current hunt reliability diagnosis and recovery sequence is documented in [`HUNT_RELIABILITY_PLAN.md`](HUNT_RELIABILITY_PLAN.md).
+
 ## Delivered
 
 - eBay Browse and AliExpress Affiliate adapters with protected server-side credentials.

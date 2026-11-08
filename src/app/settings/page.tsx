@@ -97,6 +97,7 @@ export default function SettingsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [defaults, setDefaults] = useState<Settings | null>(null);
   const [integrations, setIntegrations] = useState<Record<string, boolean> | null>(null);
+  const [legacySettings, setLegacySettings] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -107,9 +108,10 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    void fetchJson<{ settings: Settings; defaults: Settings; integrations: Record<string, boolean> }>("/api/settings").then((r) => {
+    void fetchJson<{ settings: Settings; defaults: Settings; legacySettings: boolean; integrations: Record<string, boolean> }>("/api/settings").then((r) => {
       fill(r.settings);
       setDefaults(r.defaults);
+      setLegacySettings(r.legacySettings);
       setIntegrations(r.integrations);
     });
   }, []);
@@ -127,6 +129,7 @@ export default function SettingsPage() {
         }
       const r = await fetchJson<{ settings: Settings }>("/api/settings", { method: "PUT", body: JSON.stringify(body) });
       fill(r.settings);
+      setLegacySettings(false);
       setMsg({ ok: true, text: "Saved. New thresholds apply to results and the next hunt." });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
@@ -168,6 +171,16 @@ export default function SettingsPage() {
             ))}
           </CardContent>
         </Card>
+      ) : null}
+
+      {legacySettings && defaults ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div>
+            <p className="font-medium">Legacy research thresholds are active</p>
+            <p className="mt-1 text-amber-900/80">Review and save the UK defaults before starting a production hunt.</p>
+          </div>
+          <Button variant="outline" onClick={() => fill(defaults)}>Review UK defaults</Button>
+        </div>
       ) : null}
 
       <ExtensionConnectCard />

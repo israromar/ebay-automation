@@ -5,7 +5,7 @@ import { extractEbayItemId, legacyItemId, toBrowseItemId } from "@/lib/domain/eb
 import { buildEbayPurchaseHistoryUrl, detectPurchaseHistoryBlock, parseEbayPurchaseHistoryHtml } from "@/lib/domain/ebay-purchase-history";
 import { logInfo, logWarn } from "@/lib/logger";
 import { createAliExpressProvider, createEbayProvider, loadHuntSettings } from "./providers";
-import { sourceListing } from "./sourcing";
+import { sourceListing, summarizeSourceRejections } from "./sourcing";
 import { recordSnapshot } from "./tracking";
 
 /** Re-check a listing's purchase history at most this often. */
@@ -170,8 +170,10 @@ export async function applyPurchaseHistory(
     (!updated.sourcedAt || updated.sourceError || updated.sourcedAt < new Date(now.getTime() - DAY_MS))
   ) {
     try {
-      sourced = (await sourceListing(createAliExpressProvider(), updated, settings)).sourced;
-      await prisma.trackedListing.update({ where: { id: updated.id }, data: { sourceError: null } });
+      const outcome = await sourceListing(createAliExpressProvider(), updated, settings);
+      sourced = outcome.sourced;
+      const sourceError = sourced > 0 ? null : summarizeSourceRejections(outcome);
+      await prisma.trackedListing.update({ where: { id: updated.id }, data: { sourceError } });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await prisma.trackedListing.update({ where: { id: updated.id }, data: { sourcedAt: now, sourceError: message.slice(0, 500) } });

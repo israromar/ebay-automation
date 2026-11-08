@@ -27,7 +27,16 @@ export async function GET() {
   const session = await requireSessionWorkspace();
   if (isNextResponse(session)) return session;
   const settings = await loadHuntSettings(session.workspace.id);
-  return NextResponse.json({ settings, defaults: DEFAULT_HUNT_SETTINGS, integrations: integrationStatus() });
+  return NextResponse.json({
+    settings,
+    defaults: DEFAULT_HUNT_SETTINGS,
+    legacySettings: hasLegacyResearchSettings(settings),
+    integrations: integrationStatus(),
+  });
+}
+
+function hasLegacyResearchSettings(settings: typeof DEFAULT_HUNT_SETTINGS): boolean {
+  return settings.minEbayPriceMinor < 5000 || settings.minAeOrders < 500 || settings.minAeRating > 4.5;
 }
 
 export async function PUT(req: Request) {

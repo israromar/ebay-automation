@@ -82,6 +82,7 @@ const PAGE_SIZE = 200;
 export const GET_ITEMS_BATCH = 20;
 /** Parallel single getItem calls when the batch method is not available to this keyset. */
 const SINGLE_ITEM_CONCURRENCY = 6;
+const PROVIDER_TIMEOUT_MS = 8_000;
 
 /**
  * Batch getItems (`/item/?item_ids=`) is restricted to approved Buy API partners; standard
@@ -294,6 +295,7 @@ export class EbayBrowseApiProvider {
     const token = await this.getAppToken();
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-EBAY-C-MARKETPLACE-ID": marketplaceId },
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
     const json: unknown = await res.json().catch(() => null);
     if (res.status === 401 || res.status === 403) {
@@ -310,6 +312,7 @@ export class EbayBrowseApiProvider {
         "Content-Type": "application/json",
         "X-EBAY-C-MARKETPLACE-ID": this.marketplaceId,
       },
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
     const describe = async () => `eBay Browse ${url.pathname} failed: ${res.status} ${(await res.text()).slice(0, 300)}`;
     if (res.status === 401 || res.status === 403) throw new EbayAccessError(await describe(), res.status);
@@ -334,6 +337,7 @@ export class EbayBrowseApiProvider {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: "grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope",
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new Error(`eBay token failed: ${res.status} ${await res.text()}`);

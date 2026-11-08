@@ -65,5 +65,6 @@ export interface Hunt {
   error: string | null;
   log: Array<{ at: string; message: string }>;
   startedAt: string;
+  updatedAt: string;
   finishedAt: string | null;
 }

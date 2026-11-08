@@ -15,7 +15,7 @@ import {
 } from "@/lib/providers/ebay-browse";
 import type { AliExpressProvider } from "@/lib/providers/types";
 import { ConfigError, createAliExpressProvider, createEbayProvider, loadHuntSettings, type HuntSettingsValues } from "./providers";
-import { mapWithConcurrency, sourceListing } from "./sourcing";
+import { mapWithConcurrency, sourceListing, summarizeSourceRejections } from "./sourcing";
 import { keepImportedDemand, recordSnapshot } from "./tracking";
 
 /** Listings sourced per step (each needs several AliExpress calls). */
@@ -43,8 +43,8 @@ export type HuntKind = "KEYWORDS" | "TERAPEAK";
 type HuntRow = NonNullable<Awaited<ReturnType<typeof prisma.hunt.findUnique>>>;
 
 interface Deps {
-  ebay: EbayBrowseApiProvider;
-  ae: AliExpressProvider;
+  ebay?: EbayBrowseApiProvider;
+  ae?: AliExpressProvider;
 }
 
 function appendLog(logJson: string, message: string): string {
@@ -75,10 +75,8 @@ export async function createHunt(
 }
 
 /**
- * Advance a hunt by one bounded step:
- *  1. source pending shortlisted listings (up to 6), else
- *  2. process the next payload item (one keyword, or up to 20 Terapeak rows), else
- *  3. finish.
+ * Advance a hunt by one bounded, retryable step. Discovery always makes forward
+ * progress before sourcing so partial supplier work cannot starve the cursor.
  */
 export async function stepHunt(huntId: string, options?: { deadline?: number; deps?: Deps }): Promise<HuntRow> {
   const hunt = await prisma.hunt.findUniqueOrThrow({ where: { id: huntId } });
@@ -86,34 +84,14 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
   const deadline = options?.deadline ?? Date.now() + STEP_BUDGET_MS;
 
   try {
-    const deps = options?.deps ?? { ebay: createEbayProvider(), ae: createAliExpressProvider() };
+    const deps = options?.deps ?? {};
     const settings = await loadHuntSettings(hunt.workspaceId);
-
-    const pending = await prisma.trackedListing.findMany({
-      where: { huntId, sourcedAt: null, sold30d: { gte: settings.minSold30d } },
-      orderBy: { sold30d: "desc" },
-      take: SOURCE_PER_STEP,
-    });
-    if (pending.length > 0) {
-      const sourced = await sourcePending(deps.ae, pending, settings, deadline);
-      return prisma.hunt.update({
-        where: { id: huntId },
-        data: {
-          error: null,
-          sourcedCount: { increment: sourced.withSources },
-          logJson: appendLog(
-            hunt.logJson,
-            `Sourced ${sourced.done} listing(s) on AliExpress · ${sourced.withSources} with a qualifying supplier`,
-          ),
-        },
-      });
-    }
 
     if (hunt.cursor < hunt.totalItems) {
       const payload = JSON.parse(hunt.payloadJson) as unknown[];
       if (hunt.kind === "TERAPEAK") {
         const rows = payload.slice(hunt.cursor, hunt.cursor + TERAPEAK_ROWS_PER_STEP) as TerapeakRow[];
-        const result = await importTerapeakRows(deps.ebay, hunt, rows, deadline);
+        const result = await importTerapeakRows(deps.ebay ?? createEbayProvider(), hunt, rows, deadline);
         return prisma.hunt.update({
           where: { id: huntId },
           data: {
@@ -126,7 +104,7 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
         });
       }
       const keyword = String(payload[hunt.cursor]);
-      const result = await discoverKeyword(deps.ebay, hunt, keyword, settings, deadline);
+      const result = await discoverKeyword(deps.ebay ?? createEbayProvider(), hunt, keyword, settings, deadline);
       return prisma.hunt.update({
         where: { id: huntId },
         data: {
@@ -138,6 +116,19 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
             hunt.logJson,
             `"${keyword}": scanned ${result.scanned} eBay listings · ${result.shortlisted} at ≥${settings.minSold30d} sold/30d · ${result.watching} on watch`,
           ),
+        },
+      });
+    }
+
+    const pending = await findPendingSources(huntId, settings);
+    if (pending.length > 0) {
+      const sourced = await sourcePending(deps.ae ?? createAliExpressProvider(), pending, settings, deadline);
+      return prisma.hunt.update({
+        where: { id: huntId },
+        data: {
+          error: null,
+          sourcedCount: { increment: sourced.withSources },
+          logJson: appendLog(hunt.logJson, sourceSummary(sourced)),
         },
       });
     }
@@ -173,6 +164,32 @@ export async function stepHunt(huntId: string, options?: { deadline?: number; de
   }
 }
 
+function findPendingSources(huntId: string, settings: HuntSettingsValues) {
+  return prisma.trackedListing.findMany({
+    where: {
+      huntId,
+      sourcedAt: null,
+      currency: "GBP",
+      priceMinor: { gte: settings.minEbayPriceMinor, lte: settings.maxEbayPriceMinor },
+      sold30d: { gte: settings.minSold30d },
+      demandTier: { in: ["PROJECTED", "VERIFIED"] },
+    },
+    orderBy: { sold30d: "desc" },
+    take: SOURCE_PER_STEP,
+  });
+}
+
+function sourceSummary(result: { done: number; withSources: number; rejected: Record<string, number> }): string {
+  const topReasons = Object.entries(result.rejected)
+    .filter(([, count]) => count > 0)
+    .sort(([, left], [, right]) => right - left)
+    .slice(0, 3)
+    .map(([reason, count]) => `${reason}:${count}`)
+    .join(", ");
+  const suffix = topReasons ? ` · rejected ${topReasons}` : "";
+  return `Sourced ${result.done} listing(s) · ${result.withSources} qualified${suffix}`;
+}
+
 async function sourcePending(
   ae: AliExpressProvider,
   listings: Array<Parameters<typeof sourceListing>[1]>,
@@ -182,13 +199,18 @@ async function sourcePending(
   const results = await mapWithConcurrency(listings, 3, (listing) => sourceListing(ae, listing, settings), deadline);
   let done = 0;
   let withSources = 0;
+  const rejected: Record<string, number> = {};
   for (let i = 0; i < listings.length; i++) {
     const r = results[i];
     if (!r) continue; // deadline hit — picked up next step
     done += 1;
     if (r.status === "fulfilled") {
       if (r.value.sourced > 0) withSources += 1;
-      await prisma.trackedListing.update({ where: { id: listings[i]!.id }, data: { sourceError: null } });
+      for (const [reason, count] of Object.entries(r.value.rejected)) {
+        rejected[reason] = (rejected[reason] ?? 0) + count;
+      }
+      const sourceError = r.value.sourced > 0 ? null : summarizeSourceRejections(r.value);
+      await prisma.trackedListing.update({ where: { id: listings[i]!.id }, data: { sourceError } });
     } else {
       const message = r.reason instanceof Error ? r.reason.message : String(r.reason);
       if (r.reason instanceof ConfigError) throw r.reason;
@@ -199,7 +221,7 @@ async function sourcePending(
       });
     }
   }
-  return { done, withSources };
+  return { done, withSources, rejected };
 }
 
 async function fetchDetails(ebay: EbayBrowseApiProvider, ids: string[], deadline: number): Promise<Map<string, EbayItemDetails>> {
@@ -251,8 +273,10 @@ async function discoverKeyword(
   let watching = 0;
   let tracked = 0;
   for (const summary of results) {
+    if (summary.currency !== "GBP") continue;
     const detail = details.get(summary.itemId);
     if (!detail || detail.estimatedSoldQuantity == null || detail.outOfStock) continue;
+    if (detail.currency !== "GBP") continue;
 
     const prior = existingById.get(summary.legacyItemId);
     const demand = computeDemand({
@@ -265,12 +289,23 @@ async function discoverKeyword(
     if (sold >= settings.minSold30d) shortlisted += 1;
     else watching += 1;
 
-    if (prior) {
-      await prisma.trackedListing.update({ where: { id: prior.id }, data: { huntId: hunt.id, keyword, active: true, endedReason: null } });
-      await recordSnapshot(prior, detail, now);
-    } else {
-      const created = await prisma.trackedListing.create({
-        data: {
+    const listing = await prisma.trackedListing.upsert({
+      where: { workspaceId_ebayItemId: { workspaceId: hunt.workspaceId, ebayItemId: summary.legacyItemId } },
+      update: {
+        huntId: hunt.id,
+        keyword,
+        browseItemId: summary.itemId,
+        title: detail.title,
+        url: detail.url,
+        imageUrl: detail.imageUrl ?? null,
+        priceMinor: detail.priceMinor,
+        shippingMinor: detail.shippingMinor ?? null,
+        currency: detail.currency,
+        itemCreationDate: detail.itemCreationDate,
+        active: true,
+        endedReason: null,
+      },
+      create: {
           workspaceId: hunt.workspaceId,
           huntId: hunt.id,
           ebayItemId: summary.legacyItemId,
@@ -283,11 +318,10 @@ async function discoverKeyword(
           currency: detail.currency,
           keyword,
           itemCreationDate: detail.itemCreationDate,
-        },
-      });
-      await recordSnapshot(created, detail, now);
-      tracked += 1;
-    }
+      },
+    });
+    await recordSnapshot(listing, detail, now);
+    if (!prior) tracked += 1;
   }
   return { scanned: details.size, shortlisted, watching, tracked };
 }

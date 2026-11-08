@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { fetchJson, relativeTime } from "./format";
 import type { Hunt } from "./types";
 
-/** Drives a running hunt: each poll advances the server-side hunt by one bounded step. */
+/** Drives a running hunt with explicit advance commands and read-only status recovery. */
 export function useHuntRunner(initial: Hunt | null, onProgress?: (hunt: Hunt) => void) {
   const [hunt, setHunt] = useState<Hunt | null>(initial);
   const [pollError, setPollError] = useState("");
@@ -25,7 +25,10 @@ export function useHuntRunner(initial: Hunt | null, onProgress?: (hunt: Hunt) =>
     (async () => {
       while (!stopped) {
         try {
-          const { hunt: next } = await fetchJson<{ hunt: Hunt }>(`/api/hunts/${id}`, { silent: true });
+          const { hunt: next } = await fetchJson<{ hunt: Hunt }>(`/api/hunts/${id}/advance`, {
+            method: "POST",
+            silent: true,
+          });
           if (stopped) return;
           failures = 0;
           setPollError("");
@@ -36,8 +39,8 @@ export function useHuntRunner(initial: Hunt | null, onProgress?: (hunt: Hunt) =>
         } catch (e) {
           failures += 1;
           setPollError(e instanceof Error ? e.message : String(e));
-          if (failures >= 5) return;
-          await new Promise((r) => setTimeout(r, 3000 * failures));
+          const delay = Math.min(30_000, 3000 * failures);
+          await new Promise((r) => setTimeout(r, delay));
         }
       }
     })();
@@ -60,6 +63,8 @@ export function HuntProgress({ hunt, pollError, onCancel }: { hunt: Hunt; pollEr
   const pct = hunt.totalItems ? Math.round((Math.min(hunt.cursor, hunt.totalItems) / hunt.totalItems) * 100) : 0;
   const running = hunt.status === "RUNNING";
   const unit = hunt.kind === "KEYWORDS" ? "keywords" : "rows";
+  const heartbeatAgeMs = Date.now() - new Date(hunt.updatedAt).getTime();
+  const stale = running && heartbeatAgeMs > 2 * 60_000;
   return (
     <div className="space-y-3 rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -112,6 +117,11 @@ export function HuntProgress({ hunt, pollError, onCancel }: { hunt: Hunt; pollEr
 
       {hunt.error || pollError ? (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{pollError || hunt.error}</p>
+      ) : null}
+      {stale ? (
+        <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900">
+          No worker heartbeat for {relativeTime(hunt.updatedAt)}. This page will keep retrying; the scheduled tracker can also resume the hunt.
+        </p>
       ) : null}
 
       <ol className="max-h-36 space-y-1 overflow-y-auto border-t border-border pt-2 font-mono text-[11px] text-muted-foreground">

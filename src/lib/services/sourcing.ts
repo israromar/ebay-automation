@@ -62,6 +62,16 @@ export interface SourcingOutcome {
   rejected: Record<GateReason, number>;
 }
 
+export function summarizeSourceRejections(outcome: Pick<SourcingOutcome, "considered" | "rejected">): string {
+  if (outcome.considered === 0) return "No AliExpress candidates returned";
+  const reasons = Object.entries(outcome.rejected)
+    .filter(([, count]) => count > 0)
+    .sort(([, left], [, right]) => right - left)
+    .map(([reason, count]) => `${reason}:${count}`)
+    .join(", ");
+  return `No supplier passed (${outcome.considered} considered${reasons ? `; ${reasons}` : ""})`.slice(0, 500);
+}
+
 /** Find, gate and persist the top 3 AliExpress sources for one tracked listing. */
 export async function sourceListing(
   ae: AliExpressProvider,

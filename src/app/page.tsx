@@ -485,7 +485,7 @@ export default function HuntPage() {
                     ) : (
                       <span className="text-xs text-muted-foreground">
                         {l.sourceError
-                          ? "Sourcing failed, will retry"
+                          ? l.sourceError
                           : l.sourcedAt
                             ? "No source passed the gate"
                             : (l.sold30d ?? 0) >= (data?.settings.minSold30d ?? 20)

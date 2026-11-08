@@ -37,6 +37,7 @@ async function resolveHandler(path: string[], method: Method): Promise<Handler |
     const id = path[1];
     const m = await import("@/lib/api-handlers/hunt-by-id");
     if (path.length === 2 && method === "GET") return (req) => m.GET(req, idCtx(id));
+    if (path.length === 3 && path[2] === "advance" && method === "POST") return (req) => m.ADVANCE(req, idCtx(id));
     if (path.length === 3 && path[2] === "cancel" && method === "POST") return (req) => m.CANCEL(req, idCtx(id));
   }
 

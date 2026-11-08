@@ -4,7 +4,7 @@ import { logInfo } from "@/lib/logger";
 import { GET_ITEMS_BATCH } from "@/lib/providers/ebay-browse";
 import { createAliExpressProvider, createEbayProvider, loadHuntSettings, type HuntSettingsValues } from "./providers";
 import { stepHunt } from "./hunt";
-import { sourceListing } from "./sourcing";
+import { sourceListing, summarizeSourceRejections } from "./sourcing";
 import { SNAPSHOT_MIN_GAP_MS, recordSnapshot } from "./tracking";
 
 /** Re-source winners whose AliExpress sources are older than this. */
@@ -98,8 +98,9 @@ export async function runTracker(options?: { deadline?: number }): Promise<Track
       const settings = await settingsFor(listing.workspaceId);
       if (!meetsDemand(listing, settings.minSold30d)) continue;
       try {
-        await sourceListing(ae, listing, settings);
-        await prisma.trackedListing.update({ where: { id: listing.id }, data: { sourceError: null } });
+        const outcome = await sourceListing(ae, listing, settings);
+        const sourceError = outcome.sourced > 0 ? null : summarizeSourceRejections(outcome);
+        await prisma.trackedListing.update({ where: { id: listing.id }, data: { sourceError } });
         result.resourced += 1;
       } catch (error) {
         await prisma.trackedListing.update({

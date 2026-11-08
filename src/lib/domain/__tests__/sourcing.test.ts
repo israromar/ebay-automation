@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SOURCING_RULES, gateSource, selectTopSources } from "@/lib/domain/sourcing";
+import { summarizeSourceRejections } from "@/lib/services/sourcing";
 import type { AliExpressProduct } from "@/lib/domain/types";
 
 const ebay = { title: "Resistance Bands Set Exercise Workout Fitness Tubes", priceMinor: 2499, shippingMinor: 0 };
@@ -63,5 +64,17 @@ describe("selectTopSources", () => {
     expect(r.considered).toBe(5);
     expect(r.passed.map((s) => s.product.productId)).toEqual(["b", "d", "e"]);
     expect(r.rejected.rating_below_min).toBe(1);
+  });
+});
+
+describe("supplier rejection diagnostics", () => {
+  it("distinguishes no provider results from rejected candidates", () => {
+    expect(summarizeSourceRejections({ considered: 0, rejected: {} as never })).toBe("No AliExpress candidates returned");
+    expect(
+      summarizeSourceRejections({
+        considered: 12,
+        rejected: { orders_below_min: 10, match_rejected: 2 } as never,
+      }),
+    ).toContain("orders_below_min:10");
   });
 });

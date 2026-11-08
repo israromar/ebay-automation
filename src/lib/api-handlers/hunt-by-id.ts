@@ -10,8 +10,17 @@ async function loadOwned(id: string, workspaceId: string) {
   return prisma.hunt.findFirst({ where: { id, workspaceId } });
 }
 
-/** Polling this endpoint advances a running hunt by one bounded step. */
+/** Read-only hunt status. Advancing work is an explicit command. */
 export async function GET(_req: Request, ctx?: Ctx) {
+  const session = await requireSessionWorkspace();
+  if (isNextResponse(session)) return session;
+  const { id } = (await ctx?.params) ?? {};
+  const hunt = id ? await loadOwned(id, session.workspace.id) : null;
+  if (!hunt) return NextResponse.json({ error: "Hunt not found" }, { status: 404 });
+  return NextResponse.json({ hunt: serializeHunt(hunt) });
+}
+
+export async function ADVANCE(_req: Request, ctx?: Ctx) {
   const session = await requireSessionWorkspace();
   if (isNextResponse(session)) return session;
   const { id } = (await ctx?.params) ?? {};

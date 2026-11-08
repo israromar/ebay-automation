@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { computeDemand, meetsDemand } from "@/lib/domain/demand";
 import { buildEbayPurchaseHistoryUrl } from "@/lib/domain/ebay-purchase-history";
 import { createAliExpressProvider, loadHuntSettings } from "@/lib/services/providers";
-import { sourceListing } from "@/lib/services/sourcing";
+import { sourceListing, summarizeSourceRejections } from "@/lib/services/sourcing";
 
 type Ctx = { params: Promise<Record<string, string>> };
 
@@ -43,6 +43,7 @@ export async function RESOURCE(_req: Request, ctx?: Ctx) {
   if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 });
   const settings = await loadHuntSettings(session.workspace.id);
   const outcome = await sourceListing(createAliExpressProvider(), listing, settings);
-  await prisma.trackedListing.update({ where: { id: listing.id }, data: { sourceError: null } });
+  const sourceError = outcome.sourced > 0 ? null : summarizeSourceRejections(outcome);
+  await prisma.trackedListing.update({ where: { id: listing.id }, data: { sourceError } });
   return NextResponse.json({ outcome, listing: await load(listing.id, session.workspace.id) });
 }
